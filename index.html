@@ -1,0 +1,1707 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>body{margin:0}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>Route Map</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;700;800;900&family=Overpass+Mono:wght@400;600&display=swap">
+<style>
+/* Route Map: navy ground, cream cards, one orange accent. Same identity as the mod thumbnails. */
+:root {
+  --navy: #1d3d6e; --navy-deep: #142d54; --on-navy: #f3ecd8; --on-navy-soft: #b9c4d6;
+  --card: #f3ecd8; --card-2: #e7dfc6; --card-3: #fbf8ef; --ink: #14202b; --soft: #5f6a76; --rule: #d6ccb0;
+  --accent: #e5a84b; --accent-ink: #14202b; --accent-deep: #d1943a; --good: #21994f; --bad: #b3261e;
+  --display: "Overpass", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --head: var(--display); --text: var(--display);
+  --mono: "Overpass Mono", ui-monospace, Consolas, monospace;
+  --radius: 22px;
+  --paper: var(--card); --surface: var(--card-3); --line: var(--rule); --danger: var(--bad); --signal: var(--accent);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --navy: #0e1a30; --navy-deep: #0a1322; --on-navy: #ecebe4; --on-navy-soft: #8f9db5;
+    --card: #1b2843; --card-2: #243456; --card-3: #152138; --ink: #ecebe4; --soft: #9fb0c8; --rule: #33456b;
+    --bad: #ff8a7a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --navy: #0e1a30; --navy-deep: #0a1322; --on-navy: #ecebe4; --on-navy-soft: #8f9db5;
+  --card: #1b2843; --card-2: #243456; --card-3: #152138; --ink: #ecebe4; --soft: #9fb0c8; --rule: #33456b;
+  --bad: #ff8a7a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; color: var(--ink); font-family: var(--text); font-size: 16px; line-height: 1.5; background: var(--navy); }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+/* faint transit lines behind everything, like the thumbnails */
+.ground { position: fixed; inset: 0; z-index: 0; pointer-events: none; background-image: linear-gradient(rgba(243,236,216,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(243,236,216,.07) 1px, transparent 1px); background-size: 96px 96px; background-position: 48px 48px; }
+body { background-image: linear-gradient(115deg, #20427a 0%, #1d3d6e 45%, #152f58 100%); background-attachment: fixed; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) body { background-image: linear-gradient(115deg, #10203a 0%, #0e1a30 45%, #0a1322 100%); } }
+:root[data-theme="dark"] body { background-image: linear-gradient(115deg, #10203a 0%, #0e1a30 45%, #0a1322 100%); }
+.gate, .app, .lp-card, .studio { position: relative; z-index: 1; }
+
+button, .btn { font: inherit; font-weight: 700; font-size: 14px; color: var(--on-navy); background: transparent; border: 2px solid var(--on-navy-soft); border-radius: 12px; padding: 8px 14px 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; text-decoration: none; line-height: 1.3; }
+button:hover, .btn:hover { border-color: var(--on-navy); }
+.go { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.go:hover { background: var(--accent-deep); border-color: var(--accent-deep); }
+.card button, .card .btn, .studio button, .studio .btn, .lp-card button, .tm button, .hud button { color: var(--ink); border-color: var(--rule); background: var(--card-3); }
+.card button:hover, .studio button:hover, .lp-card button:hover, .tm button:hover, .hud button:hover { border-color: var(--ink); }
+.card .go, .studio .go, .lp-card .go { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.card .go:hover, .studio .go:hover, .lp-card .go:hover { background: var(--accent-deep); border-color: var(--accent-deep); }
+
+/* wordmark: short bar, name, tagline */
+.mark { color: var(--on-navy); }
+.mark .mk-bar { display: block; width: 64px; height: 4px; background: var(--accent); margin-bottom: 26px; }
+.mark h1 { margin: 0; font-family: var(--head); font-weight: 700; font-size: clamp(56px, 9vw, 128px); line-height: .98; letter-spacing: -0.02em; }
+.mark .mk-tag { margin: 18px 0 0; font-size: clamp(18px, 2.2vw, 28px); font-weight: 400; color: var(--on-navy-soft); }
+.eclipse { display: inline-flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; letter-spacing: 3px; color: var(--on-navy-soft); }
+.eclipse i { position: relative; display: block; width: 18px; height: 18px; border-radius: 50%; background: var(--on-navy); overflow: visible; }
+.eclipse i::after { content: ""; position: absolute; left: 5px; top: -1px; width: 18px; height: 18px; border-radius: 50%; background: var(--navy); }
+
+/* first screen: wordmark left, drop card right */
+.gate { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 48px; align-items: center; padding: 48px clamp(16px, 6vw, 110px); }
+.gate-left { display: grid; gap: 28px; }
+.kicker { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 5px; text-transform: uppercase; color: var(--on-navy-soft); }
+.gate-where { margin: 0; font-size: 15px; color: var(--on-navy-soft); max-width: 48ch; }
+.gate-where b { color: var(--on-navy); }
+.gate-where code { font-family: var(--mono); font-size: 13px; color: var(--on-navy); overflow-wrap: anywhere; }
+.card { background: var(--card); color: var(--ink); border-radius: var(--radius); box-shadow: 0 40px 80px -30px rgba(0, 0, 0, .7); }
+.drop { padding: 22px; display: grid; gap: 16px; }
+.drop-zone { border: 3px dashed var(--rule); border-radius: calc(var(--radius) - 8px); padding: 44px 24px 36px; display: grid; justify-items: center; gap: 8px; text-align: center; cursor: pointer; transition: border-color .15s, background .15s; }
+.drop-zone:hover, .drop-zone.over { border-color: var(--accent); background: var(--card-3); }
+.drop-zone svg { width: 72px; height: 72px; display: block; margin-bottom: 8px; }
+.drop-zone b { font-family: var(--head); font-weight: 800; font-size: clamp(30px, 4vw, 44px); line-height: 1; letter-spacing: -0.01em; }
+.drop-zone span { font-size: 15px; color: var(--soft); font-weight: 600; }
+.drop .row { justify-content: center; }
+.status { margin: 0; font-size: 14px; color: var(--soft); text-align: center; overflow-wrap: anywhere; }
+.status:empty { display: none; }
+.status.bad { color: var(--bad); font-weight: 700; }
+
+/* map screen */
+.app { height: 100vh; height: 100dvh; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); overflow: clip; }
+.app[hidden] { display: none; }
+.bar { display: flex; align-items: center; gap: 12px 18px; flex-wrap: wrap; padding: 14px 18px 10px; color: var(--on-navy); }
+.hd { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.hd .mk-bar { width: 4px; height: 36px; background: var(--accent); margin: 0; flex: none; }
+.hd b { display: block; font-family: var(--head); font-weight: 800; font-size: 24px; line-height: 1; letter-spacing: -0.01em; }
+.hd small { display: block; font-size: 13px; color: var(--on-navy-soft); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lamp { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700; color: var(--on-navy-soft); border: 2px solid var(--on-navy-soft); border-radius: 999px; padding: 3px 10px 2px; white-space: nowrap; }
+.lamp::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #5fd37a; box-shadow: 0 0 0 3px rgba(95, 211, 122, .25); }
+.acts { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.stage { position: relative; min-height: 0; margin: 0 18px; border-radius: var(--radius); overflow: hidden; background: var(--card); box-shadow: 0 30px 60px -30px rgba(0, 0, 0, .7); }
+#view { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+#view.panning { cursor: grabbing; }
+#view [data-line] { cursor: pointer; }
+.hud { position: absolute; left: 14px; bottom: 14px; display: flex; gap: 6px; }
+.hud button { min-width: 38px; justify-content: center; padding: 6px 10px 4px; border-radius: 10px; }
+.hint { position: absolute; right: 14px; bottom: 14px; margin: 0; font-size: 12px; font-weight: 600; color: var(--soft); background: var(--card-3); padding: 5px 10px 3px; border-radius: 999px; }
+.savetoast { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); margin: 0; background: var(--navy); color: var(--on-navy); font-size: 13px; font-weight: 700; padding: 7px 14px 5px; border-radius: 999px; white-space: nowrap; }
+#view .drawin { stroke-dasharray: 1 1; stroke-dashoffset: 1; animation: drawin 1.6s cubic-bezier(.5,0,.2,1) forwards; }
+@keyframes drawin { to { stroke-dashoffset: 0; } }
+#view .pop { transform-box: fill-box; transform-origin: center; animation: pop 0.6s cubic-bezier(.3,1.6,.5,1) both; }
+@keyframes pop { from { transform: scale(0); } to { transform: scale(1); } }
+#view .fadein { animation: fadein 0.8s ease both; }
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+
+/* history strip: a cream card under the map */
+.tm { margin: 12px 18px 16px; display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 10px 16px 10px 10px; background: var(--card); color: var(--ink); border-radius: 16px; }
+.tm-play { width: 42px; height: 42px; border-radius: 12px; border: 0; background: var(--accent); color: var(--accent-ink); justify-content: center; padding: 0; }
+.tm-play:hover { background: var(--accent-deep); }
+.tm-date { min-width: 108px; line-height: 1; }
+.tm-date b { display: block; font-family: var(--head); font-weight: 800; font-size: 28px; font-variant-numeric: tabular-nums; }
+.tm-date span { font-size: 12px; color: var(--soft); font-weight: 600; }
+.tm-track { position: relative; min-width: 0; padding-top: 14px; }
+.tm-ticks { position: absolute; left: 9px; right: 9px; top: 0; height: 24px; pointer-events: none; }
+.tm-ticks i { position: absolute; bottom: 0; width: 3px; margin-left: -1.5px; border-radius: 1px; }
+.tm-ticks i.st { width: 2px; margin-left: -1px; height: 6px; background: var(--rule); }
+.tm-ticks i.ln { height: 13px; }
+.tm-ticks i.cl { height: 9px; background: repeating-linear-gradient(0deg, var(--bad) 0 2px, transparent 2px 4px); }
+#tmRange { width: 100%; accent-color: var(--navy); margin: 4px 0 0; position: relative; }
+.tm-ends { display: flex; justify-content: space-between; font-size: 11px; color: var(--soft); font-weight: 600; }
+.tm-side { display: flex; gap: 6px; }
+.tm-side select { width: auto; font-size: 13px; padding: 6px 10px 4px; border-radius: 10px; }
+.tm.off .tm-track, .tm.off .tm-side, .tm.off .tm-play { opacity: .35; pointer-events: none; }
+.tm-cap { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); max-width: min(520px, calc(100% - 28px)); background: var(--navy); color: var(--on-navy); padding: 12px 16px 10px; border-radius: 14px; box-shadow: 0 10px 24px rgba(0,0,0,.3); display: grid; gap: 5px; }
+.tm-cap .ev { display: flex; gap: 10px; align-items: center; font-weight: 700; font-size: 15px; }
+.tm-cap .when { font-size: 12px; color: var(--on-navy-soft); }
+.tm-cap .bdg { min-width: 34px; height: 22px; font-size: 12px; border-radius: 6px; flex: none; }
+.tm-cap .closed { text-decoration: line-through; opacity: .7; }
+
+/* line badge */
+.bdg { display: inline-grid; place-items: center; min-width: 46px; height: 30px; padding: 0 8px; border-radius: 8px; font-weight: 900; font-size: 15px; }
+
+/* line page */
+.linepage { position: fixed; inset: 0; z-index: 50; overflow-y: auto; background: rgba(8, 14, 26, 0.6); padding: 40px 16px; }
+.lp-card { max-width: 1000px; margin: 0 auto; background: var(--card); color: var(--ink); border-radius: var(--radius); overflow: hidden; box-shadow: 0 40px 80px -30px rgba(0,0,0,.8); }
+.lp-head { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding: 24px 28px 20px; background: var(--navy); color: var(--on-navy); border-bottom: 10px solid var(--lc); }
+.lp-head .bdg { min-width: 62px; height: 42px; font-size: 21px; border-radius: 10px; }
+.lp-head h2 { font-family: var(--head); font-size: clamp(22px, 3vw, 32px); line-height: 1.1; font-weight: 800; margin: 0; text-wrap: balance; }
+.lp-head p { margin: 4px 0 0; color: var(--on-navy-soft); font-size: 14px; font-weight: 600; }
+.lp-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; padding: 24px 28px 30px; }
+.lp-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0 0 18px; }
+.lp-facts div { padding: 10px 12px 8px; background: var(--card-3); border-radius: 12px; }
+.lp-facts dt { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--soft); }
+.lp-facts dd { margin: 0; font-family: var(--head); font-weight: 800; font-size: 22px; font-variant-numeric: tabular-nums; }
+.lp-mini { background: var(--card-3); margin-bottom: 16px; aspect-ratio: 4 / 3; max-width: 100%; border-radius: 14px; overflow: hidden; }
+.lp-mini svg { width: 100%; height: 100%; display: block; }
+.lp-stops { list-style: none; margin: 0; padding: 0; position: relative; }
+.lp-stops::before { content: ""; position: absolute; left: 13px; top: 18px; bottom: 18px; width: 8px; border-radius: 4px; background: var(--lc); }
+.lp-stops li { position: relative; padding: 10px 0 10px 46px; min-height: 52px; }
+.lp-stops li::before { content: ""; position: absolute; left: 8px; top: 14px; width: 18px; height: 18px; border-radius: 50%; background: var(--card); border: 4px solid var(--lc); }
+.lp-stops li.x::before { left: 5px; top: 11px; width: 24px; height: 24px; border-color: var(--ink); }
+.lp-stops b { font-family: var(--head); font-weight: 800; font-size: 17px; display: block; line-height: 1.25; }
+.lp-stops span { font-size: 13px; color: var(--soft); }
+.lp-stops .bdgs { display: inline-flex; gap: 4px; margin-left: 6px; vertical-align: 1px; }
+.lp-stops .bdg { min-width: 30px; height: 19px; font-size: 11px; border-radius: 5px; padding: 0 5px; }
+.lp-note { font-size: 13px; color: var(--soft); margin: 0 0 14px; }
+.lp-open { margin: 0 0 18px; padding: 12px 14px 14px; background: var(--card-3); border-left: 6px solid var(--lc); border-radius: 0 12px 12px 0; }
+.lp-open-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.lp-open-top span { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--soft); }
+.lp-open-top b { font-family: var(--head); font-weight: 800; font-size: 21px; }
+.lp-open p { font-size: 13px; color: var(--soft); margin: 2px 0 10px; }
+.lp-open-edit { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto; gap: 6px; }
+.lp-open-reset { margin-top: 8px; border: 0 !important; background: none !important; padding: 0; font-size: 13px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* settings: a floating card with tabs */
+.studio { position: fixed; top: 16px; right: 16px; bottom: 16px; width: min(420px, calc(100vw - 32px)); background: var(--card); color: var(--ink); border-radius: var(--radius); z-index: 40; display: grid; grid-template-rows: auto auto minmax(0, 1fr); transform: translateX(calc(100% + 24px)); transition: transform .22s ease; box-shadow: 0 40px 80px -30px rgba(0,0,0,.8); }
+.studio.open { transform: none; }
+.studio-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 20px 22px 12px; }
+.studio-head b { font-family: var(--head); font-weight: 800; font-size: 24px; letter-spacing: -0.01em; }
+.tabs { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; margin: 0 22px 6px; padding: 4px; background: var(--card-2); border-radius: 12px; }
+.tabs button { border: 0; background: transparent; border-radius: 9px; padding: 7px 4px 5px; font-size: 13px; justify-content: center; color: var(--soft); }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { background: var(--navy); color: var(--on-navy); }
+.studio-body { overflow-y: auto; padding: 8px 22px 24px; }
+.studio section[hidden] { display: none; }
+.field { display: grid; gap: 5px; margin-bottom: 14px; }
+.field label, .field .lab { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--soft); display: flex; justify-content: space-between; gap: 8px; }
+.field output { color: var(--ink); font-variant-numeric: tabular-nums; text-transform: none; letter-spacing: 0; }
+.studio p.why { margin: -6px 0 14px; font-size: 13px; color: var(--soft); }
+.mini { padding: 2px 9px 1px; font-size: 11px; border-radius: 7px; text-transform: none; letter-spacing: 0; }
+input[type="text"], input[type="number"], select, textarea { font: inherit; font-size: 14px; font-weight: 600; color: var(--ink); background: var(--card-3); border: 2px solid var(--rule); border-radius: 12px; padding: 8px 12px 6px; width: 100%; }
+input[type="text"]:focus, input[type="number"]:focus, select:focus { border-color: var(--navy); outline: none; }
+input[type="range"] { width: 100%; accent-color: var(--navy); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { position: relative; display: inline-flex; align-items: center; gap: 6px; border: 2px solid var(--rule); border-radius: 999px; padding: 5px 12px 3px; font-size: 13px; font-weight: 700; cursor: pointer; user-select: none; }
+.chip input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.chip:has(input:checked) { background: var(--navy); border-color: var(--navy); color: var(--on-navy); }
+.chip:has(input:focus-visible) { outline: 3px solid var(--accent); outline-offset: 2px; }
+.switches { display: grid; gap: 2px; margin-bottom: 14px; }
+.switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--rule); font-size: 14px; font-weight: 600; cursor: pointer; }
+.switch:last-child { border-bottom: 0; }
+.switch input { appearance: none; -webkit-appearance: none; width: 44px; height: 26px; margin: 0; border-radius: 999px; background: var(--card-2); border: 2px solid var(--rule); position: relative; cursor: pointer; flex: none; transition: background .15s; }
+.switch input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: var(--soft); transition: transform .15s, background .15s; }
+.switch input:checked { background: var(--navy); border-color: var(--navy); }
+.switch input:checked::after { transform: translateX(18px); background: var(--on-navy); }
+.lines { display: grid; gap: 2px; max-height: 300px; overflow-y: auto; background: var(--card-3); border-radius: 12px; padding: 8px; }
+.lines label { display: grid; grid-template-columns: auto 22px minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 13px; font-weight: 600; cursor: pointer; padding: 3px 4px; border-radius: 6px; }
+.lines label:hover { background: var(--card-2); }
+.lines .sw { height: 6px; border-radius: 3px; }
+.lines .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lines .ct { font-size: 12px; color: var(--soft); font-variant-numeric: tabular-nums; }
+.scrim { position: fixed; inset: 0; background: rgba(8, 14, 26, .35); z-index: 30; }
+.dropzone { position: fixed; inset: 0; z-index: 60; background: rgba(8, 14, 26, .65); display: grid; place-items: center; pointer-events: none; }
+.dropzone .card { width: min(520px, 90vw); padding: 22px; }
+.dropzone .drop-zone { border-color: var(--accent); }
+
+@media (max-width: 860px) {
+  .gate { grid-template-columns: minmax(0, 1fr); gap: 28px; padding: 32px 16px; }
+  .bar { padding: 10px 8px 8px; }
+  .hd b { font-size: 20px; }
+  .acts { margin-left: 0; width: 100%; }
+  .acts button { flex: 1; justify-content: center; padding-inline: 8px; }
+  .stage { margin: 0 8px; border-radius: 16px; }
+  .hint { display: none; }
+  .tm { margin: 8px; grid-template-columns: auto minmax(0, 1fr); gap: 8px 12px; }
+  .tm-track { grid-column: 1 / -1; }
+  .tm-side { grid-column: 1 / -1; }
+  .tm-cap .ev:nth-child(n+3) { display: none; }
+  .lp-body { grid-template-columns: minmax(0, 1fr); padding: 18px 16px; } .lp-head { padding: 18px 16px; } .linepage { padding: 0; } .lp-card { border-radius: 0; }
+  .studio { top: 8px; right: 8px; bottom: 8px; width: calc(100vw - 16px); }
+}
+@media (prefers-reduced-motion: reduce) { #view .drawin, #view .pop, #view .fadein { animation: none; stroke-dashoffset: 0; } * { transition: none !important; } }
+</style>
+
+<div class="ground" aria-hidden="true"></div>
+
+<section class="gate" id="gate" aria-labelledby="gateTitle">
+  <div class="gate-left">
+    <p class="kicker">Transport Fever 3</p>
+    <div class="mark"><span class="mk-bar" aria-hidden="true"></span><h1 id="gateTitle">Route Map</h1><p class="mk-tag">Your lines as a real transit map</p></div>
+    <p class="gate-where">Click <b>Route Map</b> in the game's bottom bar and choose <b>Save map</b>. The file lands in <code>Steam\userdata\&hellip;\local\route_map\export.lua</code>. Drop it on the card.</p>
+    <span class="eclipse"><i aria-hidden="true"></i>ECLIPSE</span>
+  </div>
+  <div class="card drop">
+    <div class="drop-zone" id="dropSign" role="button" tabindex="0" aria-describedby="gateHow">
+      <svg viewBox="0 0 72 72" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8 h24 l14 14 v42 H18 Z"/><path d="M42 8 v14 h14"/><path d="M36 30 v22 M26 42 l10 10 10 -10"/></svg>
+      <b>export.lua</b>
+      <span id="gateHow">Drop it here, or click to pick it</span>
+    </div>
+    <div class="row"><button id="liveBtn" type="button" class="go" hidden>Open the last file again</button></div>
+    <p class="status" id="status" role="status"></p>
+    <input type="file" id="file" accept=".lua,.txt,.log,.json" hidden>
+  </div>
+</section>
+
+<section class="app" id="map" aria-label="Network map" hidden>
+  <header class="bar">
+    <div class="hd"><span class="mk-bar" aria-hidden="true"></span><div><b>Route Map</b><small id="hdMeta"></small></div>
+      <span class="lamp" id="lamp" hidden title="The map reloads by itself when the game saves a new export">Following the file</span>
+    </div>
+    <div class="acts">
+      <button id="loadBtn" type="button">Open file</button>
+      <button id="savePng" type="button">Save PNG</button>
+      <button id="saveSvg" type="button">Save SVG</button>
+      <button id="studioOpen" type="button" class="go">Settings</button>
+    </div>
+  </header>
+  <div class="stage" id="stage">
+    <svg id="view" xmlns="http://www.w3.org/2000/svg" aria-label="Route map"></svg>
+    <div class="hud">
+      <button id="zin" type="button" aria-label="Zoom in">+</button>
+      <button id="zout" type="button" aria-label="Zoom out">&minus;</button>
+      <button id="fit" type="button">Fit</button>
+    </div>
+    <p class="hint">Drag to move, scroll to zoom, click a line for its stops. Shift and drag moves a stop.</p>
+    <div class="tm-cap" id="tmCap" hidden aria-live="polite"></div>
+    <p class="savetoast" id="saveMsg" role="status" hidden></p>
+  </div>
+  <div class="tm" id="tm">
+    <button class="tm-play" id="tmPlay" type="button" aria-label="Play the network's history">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path id="tmIcon" d="M7 4 L20 12 L7 20 Z" fill="currentColor"/></svg>
+    </button>
+    <div class="tm-date"><b id="tmYear"></b><span id="tmMonth"></span></div>
+    <div class="tm-track">
+      <div class="tm-ticks" id="tmTicks"></div>
+      <input type="range" id="tmRange" min="0" max="1" step="0.001" value="1" aria-label="Date">
+      <div class="tm-ends"><span id="tmStart"></span><span id="tmEnd"></span></div>
+    </div>
+    <div class="tm-side">
+      <select id="tmSpeed" aria-label="Playback speed"><option value="0.15">Very slow</option><option value="0.5">Slow</option><option value="1.5" selected>Normal</option><option value="5">Fast</option></select>
+      <button id="tmNow" type="button">Today</button>
+    </div>
+  </div>
+</section>
+
+<div class="scrim" id="scrim" hidden></div>
+<div class="linepage" id="linePage" role="dialog" aria-modal="true" aria-labelledby="lpTitle" hidden>
+  <div class="lp-card">
+    <div class="lp-head" id="lpHead"></div>
+    <div class="lp-body">
+      <div class="lp-side">
+        <dl class="lp-facts" id="lpFacts"></dl>
+        <div class="lp-open" id="lpOpen" hidden>
+          <div class="lp-open-top"><span>Opened</span><b id="lpOpenDate"></b></div>
+          <p id="lpOpenFrom"></p>
+          <div class="lp-open-edit">
+            <select id="lpOpenMonth" aria-label="Month it opened"></select>
+            <input id="lpOpenYear" type="number" inputmode="numeric" min="1800" max="2200" aria-label="Year it opened">
+            <button id="lpOpenSave" type="button" class="go">Set</button>
+          </div>
+          <button id="lpOpenReset" type="button" class="lp-open-reset" hidden>Use the found date</button>
+        </div>
+        <p class="lp-note" id="lpNote" hidden>Export again with the current mod to see vehicles and load for this line.</p>
+        <div class="lp-mini" id="lpMini"></div>
+        <div class="row"><button id="lpShow" type="button" class="go">Show on the map</button><button id="lpClose" type="button">Close</button></div>
+      </div>
+      <ol class="lp-stops" id="lpStops"></ol>
+    </div>
+  </div>
+</div>
+<div class="dropzone" id="dropzone" hidden><div class="card"><div class="drop-zone"><b>export.lua</b><span>Let go to load it</span></div></div></div>
+
+<aside class="studio" id="studio" aria-label="Settings">
+  <div class="studio-head"><b>Settings</b><button id="studioClose" type="button">Close</button></div>
+  <div class="tabs" role="tablist" id="tabs">
+    <button type="button" role="tab" data-tab="lines" aria-selected="true">Lines</button>
+    <button type="button" role="tab" data-tab="layout" aria-selected="false">Layout</button>
+    <button type="button" role="tab" data-tab="labels" aria-selected="false">Labels</button>
+    <button type="button" role="tab" data-tab="look" aria-selected="false">Look</button>
+  </div>
+  <div class="studio-body">
+  <section data-tab="lines">
+    <div class="field"><label for="netMode">Network</label>
+      <select id="netMode"><option value="passengers">Passengers</option><option value="freight">Freight</option><option value="all">Both</option></select></div>
+    <div class="field"><span class="lab">Kinds</span><div class="chips" id="carriers"></div></div>
+    <div class="field">
+      <span class="lab">Lines <span><button type="button" id="allOn" class="mini">All</button> <button type="button" id="allOff" class="mini">None</button></span></span>
+      <div class="lines" id="lines"></div>
+    </div>
+  </section>
+  <section data-tab="layout" hidden>
+    <div class="field"><label for="layoutMode">Layout</label>
+      <select id="layoutMode"><option value="schematic">Schematic</option><option value="geo">True positions</option></select></div>
+    <p class="why">Schematic straightens the lines like a station wall map. True positions keeps every stop where it is in the game.</p>
+    <div class="field"><label for="even">Even out spacing <output id="evenOut"></output></label><input type="range" id="even" min="0" max="100" value="60"></div>
+    <div class="field"><label for="dens">Room between stops <output id="densOut"></output></label><input type="range" id="dens" min="60" max="220" value="120"></div>
+    <div class="field"><label for="thick">Line thickness <output id="thickOut"></output></label><input type="range" id="thick" min="50" max="180" value="100"></div>
+    <div class="switches">
+      <label class="switch"><span>Crop to the network</span><input type="checkbox" id="tight" checked></label>
+    </div>
+    <div class="row"><button id="unpin" type="button">Put moved stops back</button></div>
+  </section>
+  <section data-tab="labels" hidden>
+    <div class="field"><label for="title">Map title</label><input type="text" id="title" value="Network Map" maxlength="60"></div>
+    <div class="field"><label for="labels">Stop names</label>
+      <select id="labels"><option value="all">Every stop</option><option value="key">Interchanges and ends only</option><option value="none">None</option></select></div>
+    <div class="field"><label for="names">Station names</label>
+      <select id="names"><option value="town">Without the town (Oil Well)</option><option value="full">As in the game</option><option value="short">Shortest (no "Station")</option></select></div>
+    <div class="field"><label for="fsize">Name size <output id="fsizeOut"></output></label><input type="range" id="fsize" min="9" max="18" value="12"></div>
+    <div class="switches">
+      <label class="switch"><span>Line badges</span><input type="checkbox" id="badges" checked></label>
+    </div>
+  </section>
+  <section data-tab="look" hidden>
+    <div class="field"><label for="sheet">Map style</label>
+      <select id="sheet"><option value="paper">Cream</option><option value="night">Night</option><option value="blueprint">Blueprint</option><option value="print">Black and white</option></select></div>
+    <div class="field"><label for="colors">Line colours</label>
+      <select id="colors"><option value="shared">Game colours, split where two lines match</option><option value="game">Game colours</option><option value="all">A different colour per line</option></select></div>
+    <div class="switches">
+      <label class="switch"><span>Water</span><input type="checkbox" id="water" checked></label>
+      <label class="switch"><span>Town areas</span><input type="checkbox" id="areas" checked></label>
+    </div>
+  </section>
+  </div>
+</aside>
+
+
+<script>
+(() => {
+"use strict";
+const $ = id => document.getElementById(id);
+
+/* ---------- reading whatever the user hands over ---------- */
+function hexToText(hex) {
+  const bytes = new Uint8Array(hex.length >> 1);
+  for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return new TextDecoder("utf-8").decode(bytes);
+}
+function parseExport(text) {
+  const t = text.trim();
+  if (!t) throw new Error("That file is empty.");
+  if (t[0] === "{") { try { return JSON.parse(t); } catch (e) { /* not raw JSON, keep looking */ } }
+  // log lines: ROUTEMAP|i|n|hex  (keep the last complete set)
+  const re = /ROUTEMAP\|(\d+)\|(\d+)\|([0-9a-f]+)/g;
+  let m, parts = [], last = null;
+  while ((m = re.exec(t))) {
+    const i = +m[1], n = +m[2];
+    if (i === 1) parts = [];
+    parts[i - 1] = m[3];
+    if (i === n && parts.filter(Boolean).length === n) last = parts.join("");
+  }
+  if (!last) {
+    const runs = t.match(/[0-9a-f]{40,}/g);
+    if (runs) last = runs.reduce((a, b) => (b.length > a.length ? b : a));
+  }
+  if (!last) throw new Error("No route data found in that file. Expected export.lua from the userdata route_map folder, or log lines starting with ROUTEMAP|.");
+  if (last.length % 2) last = last.slice(0, -1);
+  try { return JSON.parse(hexToText(last)); }
+  catch (e) { throw new Error("Found route data but it is cut off or damaged. If this came from the log, copy every ROUTEMAP| line."); }
+}
+
+/* ---------- normalise into a network ---------- */
+const CARRIERS = [["RAIL", "Rail"], ["TRAM", "Tram"], ["ROAD", "Road"], ["WATER", "Water"], ["AIR", "Air"], ["OTHER", "Other"]];
+const FALLBACK = ["#d8232a", "#1761b0", "#21994f", "#f08a1c", "#8b45ad", "#0d9aa0", "#d04c8c", "#735c40", "#66727f", "#3390d9", "#a3b113", "#c0392b"];
+// Game dates are kept as year + fraction, so they sort and scrub easily (1913.5 is mid 1913)
+function dateNum(d) {
+  if (!d || typeof d.y !== "number") return null;
+  return d.y + ((d.m || 1) - 1) / 12 + ((d.d || 1) - 1) / 365;
+}
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const dateText = (t, withMonth) => { if (t == null) return ""; const y = Math.floor(t + 1e-9), m = Math.min(11, Math.floor((t - y) * 12 + 1e-6)); return withMonth ? MONTHS[m] + " " + y : String(y); };
+
+// Water mask from the mod: run lengths per row (land first), rows from south to north.
+function readWater(w) {
+  if (!w || !Array.isArray(w.rows) || !(w.w > 0) || !(w.h > 0) || !(w.step > 0)) return null;
+  const grid = new Uint8Array(w.w * w.h);
+  w.rows.forEach((row, j) => {
+    let i = 0, wet = false;
+    for (const part of String(row).split(",")) { const n = +part || 0; if (wet) grid.fill(1, j * w.w + i, j * w.w + Math.min(w.w, i + n)); i += n; wet = !wet; }
+  });
+  return { x0: w.x0, y0: w.y0, step: w.step, w: w.w, h: w.h, grid, wet: w.wet };
+}
+
+// Line colours: keep the game's, separate lines that share one, or give every line its own.
+const PALETTE = ["#e3262f", "#0f6fc6", "#1e9a4b", "#f39200", "#8e44ad", "#00a3a6", "#e5007d", "#7a5230", "#5d6d7e", "#9bbb1d", "#f6c400", "#3fb7e8", "#b5302a", "#2d3e8f", "#d17bc1", "#4f7d3a"];
+const hexRgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const colorDist = (a, b) => { const p = hexRgb(a), q = hexRgb(b); return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]); };
+const CARRIER_RANK = { RAIL: 0, TRAM: 1, ROAD: 2, WATER: 3, AIR: 4, OTHER: 5 };
+function applyColors(net, mode) {
+  const order = [...net.lines].sort((a, b) => CARRIER_RANK[a.carrier] - CARRIER_RANK[b.carrier] || a.order - b.order);
+  if (mode === "game") { net.lines.forEach(l => l.color = l.gameColor); return; }
+  if (mode === "all") { order.forEach((l, i) => l.color = PALETTE[i % PALETTE.length]); return; }
+  const used = [], seen = new Set();
+  for (const l of order) {
+    if (!seen.has(l.gameColor)) { seen.add(l.gameColor); l.color = l.gameColor; used.push(l.color); continue; }
+    const free = PALETTE.filter(c => used.every(u => colorDist(c, u) > 70));
+    l.color = free[0] || PALETTE[used.length % PALETTE.length];
+    used.push(l.color);
+  }
+}
+const BADGE_LETTER = { RAIL: "R", TRAM: "T", ROAD: "B", WATER: "F", AIR: "A", OTHER: "X" };
+function assignBadges(net) {
+  const count = {};
+  [...net.lines].sort((a, b) => CARRIER_RANK[a.carrier] - CARRIER_RANK[b.carrier] || a.order - b.order).forEach(l => {
+    count[l.carrier] = (count[l.carrier] || 0) + 1;
+    l.badge = BADGE_LETTER[l.carrier] + count[l.carrier];
+  });
+}
+const inkOn = hex => { const [r, g, b] = hexRgb(hex); return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.62 ? "#14202b" : "#ffffff"; };
+
+const hex2 = v => Math.max(0, Math.min(255, Math.round(v * 255))).toString(16).padStart(2, "0");
+function toNetwork(raw) {
+  if (!raw || !Array.isArray(raw.lines) || !Array.isArray(raw.stations)) throw new Error("The file was read, but it has no lines or stations in it.");
+  const stations = new Map();
+  for (const s of raw.stations) {
+    if (!s || !Array.isArray(s.pos) || typeof s.pos[0] !== "number" || typeof s.pos[1] !== "number") continue;
+    stations.set(s.id, { id: s.id, name: s.name || ("Stop " + s.id), x: s.pos[0], y: s.pos[1], town: s.town, cargo: s.cargo === true, passengers: s.passengers === true, built: dateNum(s.built) });
+  }
+  const towns = new Map();
+  for (const t of (raw.towns || [])) if (t && t.name) towns.set(t.id, { id: t.id, name: t.name });
+  const lines = [];
+  raw.lines.forEach((l, i) => {
+    const seq = [];
+    for (const st of (l.stops || [])) {
+      const g = typeof st === "object" ? st.group : st;
+      if (stations.has(g) && seq[seq.length - 1] !== g) seq.push(g);
+    }
+    if (seq.length > 1 && seq[0] === seq[seq.length - 1]) seq.pop();
+    const carrier = CARRIERS.some(c => c[0] === l.carrier) ? l.carrier : "OTHER";
+    let color = FALLBACK[i % FALLBACK.length];
+    if (Array.isArray(l.color) && l.color.length >= 3 && l.color.every(v => typeof v === "number")) color = "#" + l.color.slice(0, 3).map(hex2).join("");
+    const nm = l.name || "";
+    const cargoTypes = Array.isArray(l.cargoTypes) ? l.cargoTypes.filter(c => typeof c === "string") : null;
+    // freight when the vehicles carry goods and no passengers; older exports fall back to the line name
+    const cargo = /passeng/i.test(nm) ? false
+      : cargoTypes && cargoTypes.length ? !cargoTypes.some(c => /passeng/i.test(c))
+      : seq.length > 0 && seq.every(g => stations.get(g).cargo && !stations.get(g).passengers);
+    lines.push({ id: l.id ?? i, name: l.name || ("Line " + (i + 1)), carrier, color, gameColor: color, seq, cargo, on: true, order: i,
+      cargoTypes: cargoTypes && !/passeng/i.test(nm) ? cargoTypes.filter(c => !/passeng/i.test(c)) : [],
+      firstVehicle: dateNum(l.firstVehicle), opened: dateNum(l.opened), openedFrom: typeof l.openedFrom === "string" ? l.openedFrom : null,
+      vehicles: typeof l.vehicles === "number" ? l.vehicles : null, maxFrequency: typeof l.maxFrequency === "number" ? l.maxFrequency : null, load: l.load || null });
+  });
+  const missing = raw.stations.length - stations.size;
+  return { stations, towns, lines, water: readWater(raw.water), date: dateNum(raw.date), gameStart: dateNum(raw.gameStart), history: raw.history || null, raw, year: raw.year, sample: !!raw.sample, missing, diagnostics: raw.diagnostics || [] };
+}
+
+/* ---------- layout ---------- */
+const CELL = 58, MARGIN = 78, HEAD = 118;
+const WEIGHT = { RAIL: 1, TRAM: 0.72, ROAD: 0.5, WATER: 0.6, AIR: 0.45, OTHER: 0.6 };
+const DASH = { WATER: [1.6, 1.3], AIR: [0.2, 1.7] };
+const pins = new Map();
+
+function layout(net, opt) {
+  const lines = net.lines.filter(l => l.on && opt.carriers.has(l.carrier) && l.seq.length >= 2 && (opt.net === "all" || (opt.net === "freight") === !!l.cargo));
+  const st = new Map(), edges = new Map();
+  const node = id => { let n = st.get(id); if (!n) { const s = net.stations.get(id); n = { id, name: s.name, town: s.town, x: s.x, y: s.y, lines: new Set(), nbrs: new Set(), ends: 0 }; st.set(id, n); } return n; };
+  for (const l of lines) {
+    const n = l.seq.length, deg = new Map();
+    l.seq.forEach(id => node(id).lines.add(l));
+    const steps = n === 2 ? 1 : n, mine = new Set();
+    for (let i = 0; i < steps; i++) {
+      const a = l.seq[i], b = l.seq[(i + 1) % n];
+      if (a === b) continue;
+      const lo = a < b ? a : b, hi = a < b ? b : a, key = lo + "|" + hi;
+      let e = edges.get(key);
+      if (!e) { e = { a: lo, b: hi, lines: [] }; edges.set(key, e); }
+      if (!e.lines.includes(l)) e.lines.push(l);
+      if (!mine.has(key)) { mine.add(key); deg.set(a, (deg.get(a) || 0) + 1); deg.set(b, (deg.get(b) || 0) + 1); }
+      node(a).nbrs.add(b); node(b).nbrs.add(a);
+    }
+    l.ends = [];
+    for (const [id, d] of deg) if (d === 1) { st.get(id).ends++; l.ends.push(id); }   // a there-and-back line has real ends, a loop has none
+    if (!l.ends.length) l.ends.push(l.seq[0]);
+  }
+  const nodes = [...st.values()];
+  if (!nodes.length) return { nodes, edges: [], lines, cols: 6, rows: 4, blocks: [] };
+  const e = opt.even;
+  const rank = vals => { const u = [...new Set(vals)].sort((a, b) => a - b); const m = new Map(); u.forEach((v, i) => m.set(v, u.length > 1 ? i / (u.length - 1) : 0.5)); return m; };
+
+  // 1. one block per town, each with its own small grid
+  const groups = new Map();
+  for (const n of nodes) { const k = net.towns.has(n.town) ? "t" + n.town : "s" + n.id; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(n); }
+  const blocks = [];
+  for (const [k, members] of groups) {
+    const xs = members.map(n => n.x), ys = members.map(n => n.y), N = members.length;
+    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+    const spanX = Math.max(1, maxX - minX), spanY = Math.max(1, maxY - minY);
+    const aspect = Math.max(0.45, Math.min(2.4, spanX / spanY));
+    let cw = 1, ch = 1;
+    if (N > 1) {
+      cw = Math.max(N === 2 && aspect < 1 ? 1 : 2, Math.round(Math.sqrt(N * aspect) * opt.density * 1.45));
+      ch = Math.max(N === 2 && aspect >= 1 ? 1 : 2, Math.round(Math.sqrt(N / aspect) * opt.density * 1.45));
+      while (cw * ch < N * 1.6) { if (cw / ch <= aspect) cw++; else ch++; }
+    }
+    const rx = rank(xs), ry = rank(ys);
+    for (const n of members) {
+      const ux = N > 1 ? (1 - e) * ((n.x - minX) / spanX) + e * rx.get(n.x) : 0.5;
+      const uy = N > 1 ? (1 - e) * ((n.y - minY) / spanY) + e * ry.get(n.y) : 0.5;
+      n.lfx = ux * (cw - 1); n.lfy = (1 - uy) * (ch - 1);
+    }
+    const town = net.towns.get(members[0].town);
+    const b = { key: k, name: k[0] === "t" ? town.name : null, members, cw, ch, cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 };
+    members.forEach(n => n.block = b);
+    blocks.push(b);
+  }
+
+  // geographic layout: true positions, straight connections, scaled so close stops still have room
+  if (opt.geo) {
+    const xs = nodes.map(n => n.x), ys = nodes.map(n => n.y);
+    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+    const near = nodes.map(n => Math.min(...nodes.filter(m => m !== n).map(m => Math.hypot(m.x - n.x, m.y - n.y)), Infinity)).filter(isFinite).sort((a, b) => a - b);
+    const typical = near.length ? near[Math.floor(near.length * 0.3)] : 500;
+    let k = 1.35 * opt.density / Math.max(typical, 1);                 // grid units per metre
+    k = Math.min(k, 90 / Math.max(maxX - minX, maxY - minY, 1));        // never wider than about 90 cells
+    for (const n of nodes) { n.gx = (n.x - minX) * k; n.gy = (maxY - n.y) * k; }
+    const list = [...edges.values()];
+    for (const ed of list) { const A = st.get(ed.a), B = st.get(ed.b); ed.pts = [[A.gx, A.gy], [B.gx, B.gy]]; ed.lines.sort((p, q) => p.order - q.order); }
+    return { nodes, edges: list, lines, cols: Math.max(4, (maxX - minX) * k + 1), rows: Math.max(3, (maxY - minY) * k + 1), blocks, geo: true };
+  }
+
+  // 2. place blocks by geography, push overlaps apart, then squeeze out empty bands
+  const gut = 2, area = blocks.reduce((a, b) => a + (b.cw + gut) * (b.ch + gut), 0);
+  const bx = blocks.map(b => b.cx), by = blocks.map(b => b.cy);
+  const span = Math.max(1, Math.max(...bx) - Math.min(...bx), Math.max(...by) - Math.min(...by));
+  const T = Math.sqrt(area) * (0.5 + (1 - e) * 2.2);
+  for (const b of blocks) { b.x = (b.cx - Math.min(...bx)) / span * T - b.cw / 2; b.y = (Math.max(...by) - b.cy) / span * T - b.ch / 2; }
+  const separate = integer => {
+    for (let it = 0; it < 400; it++) {
+      let any = false;
+      for (let i = 0; i < blocks.length; i++) for (let j = i + 1; j < blocks.length; j++) {
+        const p = blocks[i], q = blocks[j];
+        const ox = Math.min(p.x + p.cw, q.x + q.cw) - Math.max(p.x, q.x) + gut, oy = Math.min(p.y + p.ch, q.y + q.ch) - Math.max(p.y, q.y) + gut;
+        if (ox <= 0 || oy <= 0) continue;
+        any = true;
+        const alongX = ox < oy || (ox === oy && Math.abs(p.cx - q.cx) >= Math.abs(p.cy - q.cy));
+        const d = alongX ? ox : oy, h = integer ? Math.ceil(d / 2) : d / 2 + 0.01;
+        if (alongX) { const sgn = (p.x + p.cw / 2) <= (q.x + q.cw / 2) ? 1 : -1; p.x -= sgn * h; q.x += sgn * h; }
+        else { const sgn = (p.y + p.ch / 2) <= (q.y + q.ch / 2) ? 1 : -1; p.y -= sgn * h; q.y += sgn * h; }
+      }
+      if (!any) break;
+    }
+  };
+  separate(false);
+  blocks.forEach(b => { b.x = Math.round(b.x); b.y = Math.round(b.y); });
+  separate(true);
+  const maxGap = gut + Math.round((1 - e) * 5);
+  for (const [pos, size] of [["x", "cw"], ["y", "ch"]]) {
+    const sorted = [...blocks].sort((p, q) => p[pos] - q[pos]);
+    let end = sorted[0][pos] + sorted[0][size], shift = 0;
+    for (let i = 1; i < sorted.length; i++) {
+      const b = sorted[i], start = b[pos];
+      if (start - end > maxGap) shift += start - end - maxGap;
+      end = Math.max(end, start + b[size]);
+      b[pos] = start - shift;
+    }
+    const min = Math.min(...blocks.map(b => b[pos]));
+    blocks.forEach(b => b[pos] -= min);
+  }
+  const cols = Math.max(4, ...blocks.map(b => b.x + b.cw)), rows = Math.max(3, ...blocks.map(b => b.y + b.ch));
+
+  // 3. drop stops onto the grid inside their block
+  const occ = new Map(), key = (x, y) => x + "," + y;
+  const inGrid = (x, y) => x >= 0 && y >= 0 && x < cols && y < rows;
+  const free = (x, y) => inGrid(x, y) && !occ.has(key(x, y));
+  const inBlock = (n, x, y) => x >= n.block.x && y >= n.block.y && x < n.block.x + n.block.cw && y < n.block.y + n.block.ch;
+  const put = (n, x, y) => { n.gx = x; n.gy = y; occ.set(key(x, y), n); };
+  for (const n of nodes) { n.fx = n.block.x + n.lfx; n.fy = n.block.y + n.lfy; }
+  const order = [...nodes].sort((a, b) => b.nbrs.size - a.nbrs.size || a.id - b.id);
+  for (const n of order) { const p = pins.get(n.id); if (p && free(p[0], p[1])) { put(n, p[0], p[1]); n.pinned = true; } }
+  for (const n of order) {
+    if (n.pinned) continue;
+    const cx = Math.round(n.fx), cy = Math.round(n.fy);
+    let best = null, bd = Infinity;
+    for (let r = 0; r <= Math.max(cols, rows) && !best; r++)
+      for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r || !free(cx + dx, cy + dy)) continue;
+        const d = Math.hypot(cx + dx - n.fx, cy + dy - n.fy) + (inBlock(n, cx + dx, cy + dy) ? 0 : 50);
+        if (d < bd) { bd = d; best = [cx + dx, cy + dy]; }
+      }
+    put(n, best[0], best[1]);
+  }
+
+  // 4. local search: nudge stops so connections run horizontal, vertical or at 45 degrees
+  const hits = (p, q) => {
+    const sx = Math.sign(q[0] - p[0]), sy = Math.sign(q[1] - p[1]);
+    let x = p[0] + sx, y = p[1] + sy, h = 0, guard = 0;
+    while ((x !== q[0] || y !== q[1]) && guard++ < 500) { if (occ.has(key(x, y))) h++; x += sx; y += sy; }
+    return h;
+  };
+  const bends = (a, b) => {
+    const dx = b[0] - a[0], dy = b[1] - a[1], adx = Math.abs(dx), ady = Math.abs(dy);
+    if (!dx || !dy || adx === ady) return [{ pts: [a, b], h: hits(a, b) }];
+    const d = Math.min(adx, ady), s = [Math.sign(dx) * d, Math.sign(dy) * d];
+    return [[a[0] + s[0], a[1] + s[1]], [b[0] - s[0], b[1] - s[1]]].map(m => ({ pts: [a, m, b], h: hits(a, m) + hits(m, b) + (occ.has(key(m[0], m[1])) ? 2 : 0) }));
+  };
+  const cost = (n, x, y) => {
+    let c = 1.1 * Math.hypot(x - n.fx, y - n.fy);
+    for (const id of n.nbrs) {
+      const m = st.get(id), ddx = m.gx - x, ddy = m.gy - y, dx = Math.abs(ddx), dy = Math.abs(ddy);
+      const far = m.block !== n.block ? 0.35 : 1;   // long links between towns matter less than tidy streets
+      c += far * 2.2 * Math.min(dx, dy, Math.abs(dx - dy)) + 0.3 * Math.max(0, Math.max(dx, dy) - 4) * far;
+      const ix = m.fx - n.fx, iy = m.fy - n.fy;
+      if (Math.abs(ix) > 0.8 && Math.sign(ix) !== Math.sign(ddx)) c += 5;
+      if (Math.abs(iy) > 0.8 && Math.sign(iy) !== Math.sign(ddy)) c += 5;
+      c += 2.5 * Math.min(...bends([x, y], [m.gx, m.gy]).map(o => o.h));
+    }
+    return c;
+  };
+  for (let pass = 0; pass < 8; pass++) {
+    let moved = false;
+    for (const n of order) {
+      if (n.pinned) continue;
+      let mx = n.gx, my = n.gy, bc = cost(n, n.gx, n.gy);
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+        const x = n.gx + dx, y = n.gy + dy;
+        if ((!dx && !dy) || !free(x, y) || !inBlock(n, x, y)) continue;
+        const c = cost(n, x, y);
+        if (c < bc - 1e-6) { bc = c; mx = x; my = y; }
+      }
+      if (mx !== n.gx || my !== n.gy) { occ.delete(key(n.gx, n.gy)); put(n, mx, my); moved = true; }
+    }
+    if (!moved) break;
+  }
+
+  // 5. route each connection with at most one 45 degree bend, avoiding other stops where possible
+  const list = [...edges.values()];
+  for (const ed of list) {
+    const A = st.get(ed.a), B = st.get(ed.b);
+    const o = bends([A.gx, A.gy], [B.gx, B.gy]);
+    ed.pts = (o.length > 1 && o[1].h < o[0].h ? o[1] : o[0]).pts;
+    ed.lines.sort((p, q) => p.order - q.order);
+  }
+  return { nodes, edges: list, lines, cols, rows, blocks };
+}
+
+/* ---------- drawing: build a display list, then paint it as SVG or canvas ---------- */
+const SHEETS = {
+  paper: { bg: "#f3f5f1", ink: "#14202b", sub: "#5c6972", stop: "#ffffff", rule: "#c9d1cf", town: "#dfe5df", townLine: "#aab6af", water: "#cddfe6", shore: "#b4ccd6" },
+  night: { bg: "#0f1922", ink: "#eef3f5", sub: "#93a3ae", stop: "#0f1922", rule: "#2b3a46", town: "#1d2c38", townLine: "#3a4d5d", water: "#0b2233", shore: "#123247" },
+  print: { bg: "#ffffff", ink: "#111111", sub: "#444444", stop: "#ffffff", rule: "#9a9a9a", town: "#eeeeee", townLine: "#9a9a9a", water: "#e4e4e4", shore: "#bdbdbd", mono: true },
+  blueprint: { bg: "#17407c", ink: "#f2f6fb", sub: "#b4c8e4", stop: "#17407c", rule: "#3562a3", town: "#235499", townLine: "#5b86c4", water: "#123668", shore: "#2a5a9a" }
+};
+const FONT = '"Overpass", "Segoe UI", "Helvetica Neue", Arial, sans-serif';
+const meter = document.createElement("canvas").getContext("2d");
+const textW = (s, size, weight) => { meter.font = `${weight} ${size}px ${FONT}`; return meter.measureText(s).width; };
+
+function offsetPath(pts, d, radius) {
+  const P = pts.map(p => [...p]), n = P.length, U = [];
+  for (let i = 0; i < n - 1; i++) { const dx = P[i + 1][0] - P[i][0], dy = P[i + 1][1] - P[i][1], L = Math.hypot(dx, dy) || 1; U.push([dx / L, dy / L, L]); }
+  const N = U.map(u => [-u[1], u[0]]), O = [];
+  for (let i = 0; i < n; i++) {
+    if (i === 0) O.push([P[0][0] + N[0][0] * d, P[0][1] + N[0][1] * d]);
+    else if (i === n - 1) O.push([P[i][0] + N[i - 1][0] * d, P[i][1] + N[i - 1][1] * d]);
+    else { const k = 1 + N[i - 1][0] * N[i][0] + N[i - 1][1] * N[i][1]; O.push([P[i][0] + (N[i - 1][0] + N[i][0]) / k * d, P[i][1] + (N[i - 1][1] + N[i][1]) / k * d]); }
+  }
+  const cmd = [["M", O[0][0], O[0][1]]];
+  for (let i = 1; i < n; i++) {
+    if (i < n - 1) {
+      const r = Math.min(radius, U[i - 1][2] / 2, U[i][2] / 2);
+      cmd.push(["L", O[i][0] - U[i - 1][0] * r, O[i][1] - U[i - 1][1] * r]);
+      cmd.push(["Q", O[i][0], O[i][1], O[i][0] + U[i][0] * r, O[i][1] + U[i][1] * r]);
+    } else cmd.push(["L", O[i][0], O[i][1]]);
+  }
+  return cmd;
+}
+
+
+/* ---------- water: warp the game's water mask onto the schematic ---------- */
+function shiftItem(it, dx, dy) {
+  if (it.t === "clip") it.box = [it.box[0] + dx, it.box[1] + dy, it.box[2] + dx, it.box[3] + dy];
+  else if (it.t === "multipoly") it.polys = it.polys.map(pts => pts.map(p => [p[0] + dx, p[1] + dy]));
+  else if (it.t === "path") it.d = it.d.map(c => c.map((v, i) => i === 0 ? v : v + (i % 2 ? dx : dy)));
+  else if ("x" in it) { it.x += dx; it.y += dy; }
+}
+
+function makeWarp(nodes) {
+  if (nodes.length < 3) return null;
+  const xs = nodes.map(n => n.x), ys = nodes.map(n => n.y);
+  const span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), 1);
+  // least squares affine fit from game position to sheet position
+  let S = [[0, 0, 0], [0, 0, 0], [0, 0, 0]], bx = [0, 0, 0], by = [0, 0, 0];
+  for (const n of nodes) {
+    const v = [n.x, n.y, 1];
+    for (let i = 0; i < 3; i++) { for (let j = 0; j < 3; j++) S[i][j] += v[i] * v[j]; bx[i] += v[i] * n.px; by[i] += v[i] * n.py; }
+  }
+  const solve = (A, b) => {
+    const M = A.map((r, i) => [...r, b[i]]);
+    for (let c = 0; c < 3; c++) {
+      let p = c; for (let r = c + 1; r < 3; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+      [M[c], M[p]] = [M[p], M[c]];
+      if (Math.abs(M[c][c]) < 1e-9) return null;
+      for (let r = 0; r < 3; r++) if (r !== c) { const f = M[r][c] / M[c][c]; for (let k = c; k < 4; k++) M[r][k] -= f * M[c][k]; }
+    }
+    return M.map((r, i) => r[3] / M[i][i]);
+  };
+  const ax = solve(S, bx), ay = solve(S, by);
+  if (!ax || !ay) return null;
+  const aff = (x, y) => [ax[0] * x + ax[1] * y + ax[2], ay[0] * x + ay[1] * y + ay[2]];
+  const res = nodes.map(n => { const a = aff(n.x, n.y); return [n.x, n.y, n.px - a[0], n.py - a[1]]; });
+  const s2 = (span * 0.06) ** 2, w0 = 1 / (span * 0.3) ** 2;
+  return (x, y) => {
+    const a = aff(x, y); let sw = w0, cx = 0, cy = 0;
+    for (const r of res) { const w = 1 / ((x - r[0]) ** 2 + (y - r[1]) ** 2 + s2); sw += w; cx += w * r[2]; cy += w * r[3]; }
+    return [a[0] + cx / sw, a[1] + cy / sw];
+  };
+}
+
+// Traces the water mask into closed outlines (marching squares), rounds them off (Chaikin),
+// then bends them onto the schematic. Outside the mask counts as land, so every outline closes.
+function waterShapes(water, warp, clip) {
+  const { x0, y0, step, w, h, grid } = water;
+  const at = (i, j) => (i < 0 || j < 0 || i >= w || j >= h) ? 0 : grid[j * w + i];
+  const link = new Map();
+  const add = (p, q) => { (link.get(p) || link.set(p, []).get(p)).push(q); (link.get(q) || link.set(q, []).get(q)).push(p); };
+  for (let j = -1; j < h; j++) for (let i = -1; i < w; i++) {
+    const a = at(i, j), b = at(i + 1, j), c = at(i + 1, j + 1), d = at(i, j + 1);
+    const m = a | b << 1 | c << 2 | d << 3;
+    if (m === 0 || m === 15) continue;
+    const B = "h" + i + "," + j, R = "v" + (i + 1) + "," + j, T = "h" + i + "," + (j + 1), L = "v" + i + "," + j;
+    const e = [];
+    if (a !== b) e.push(B); if (b !== c) e.push(R); if (c !== d) e.push(T); if (d !== a) e.push(L);
+    if (e.length === 2) add(e[0], e[1]);
+    else if (a) { add(B, R); add(T, L); }   // saddle: water corners a and c stay apart
+    else { add(B, L); add(T, R); }
+  }
+  const pos = k => { const [x, y] = k.slice(1).split(",").map(Number); return k[0] === "h" ? [x + 0.5, y] : [x, y + 0.5]; };
+  const loops = [], seen = new Set();
+  for (const start of link.keys()) {
+    if (seen.has(start)) continue;
+    const loop = []; let prev = null, cur = start;
+    while (cur && !seen.has(cur)) {
+      seen.add(cur); loop.push(pos(cur));
+      const nb = link.get(cur); const next = nb[0] !== prev ? nb[0] : nb[1];
+      prev = cur; cur = next;
+    }
+    if (loop.length >= 3) loops.push(loop);
+  }
+  const chaikin = pts => {
+    const out = [];
+    for (let k = 0; k < pts.length; k++) {
+      const p = pts[k], q = pts[(k + 1) % pts.length];
+      out.push([p[0] * 0.75 + q[0] * 0.25, p[1] * 0.75 + q[1] * 0.25], [p[0] * 0.25 + q[0] * 0.75, p[1] * 0.25 + q[1] * 0.75]);
+    }
+    return out;
+  };
+  const shapes = [];
+  for (let loop of loops) {
+    loop = chaikin(chaikin(loop));
+    const pts = loop.map(p => warp(x0 + (p[0] + 0.5) * step, y0 + (p[1] + 0.5) * step));
+    let x0b = Infinity, y0b = Infinity, x1b = -Infinity, y1b = -Infinity;
+    for (const p of pts) { x0b = Math.min(x0b, p[0]); y0b = Math.min(y0b, p[1]); x1b = Math.max(x1b, p[0]); y1b = Math.max(y1b, p[1]); }
+    if (x1b < clip[0] || x0b > clip[2] || y1b < clip[1] || y0b > clip[3]) continue;
+    shapes.push(pts);
+  }
+  return shapes;
+}
+
+// black and white print: lines told apart by shade and dash pattern instead of colour
+const MONO_SHADES = ["#111111", "#5a5a5a", "#8c8c8c"], MONO_DASH = [null, [2.2, 1], [0.9, 0.9], [3, 1, 0.8, 1]];
+function build(net, lay, opt) {
+  const sh = SHEETS[opt.sheet], items = [];
+  const monoIdx = new Map([...net.lines].sort((a, b) => a.order - b.order).map((l, i) => [l, i]));
+  const colOf = l => sh.mono ? MONO_SHADES[monoIdx.get(l) % 3] : l.color;
+  const dashOf = l => sh.mono ? MONO_DASH[Math.floor(monoIdx.get(l) / 3) % 4] || DASH[l.carrier] || null : DASH[l.carrier];
+  let W = MARGIN * 2 + (lay.cols - 1) * CELL;
+  const mapH = (lay.rows - 1) * CELL;
+  const px = n => [MARGIN + n.gx * CELL, HEAD + MARGIN * 0.7 + n.gy * CELL];
+  const base = CELL * 0.15 * opt.thick;
+  const lw = l => Math.max(2, base * WEIGHT[l.carrier]);
+  const byId = new Map(lay.nodes.map(n => [n.id, n]));
+
+  // lines. In the schematic, connections are split into single grid steps, so lines from different
+  // connections that run along the same stretch are drawn side by side instead of on top of each other.
+  const obstacles = [], gap = 1.6;
+  const toPx = g => [MARGIN + g[0] * CELL, HEAD + MARGIN * 0.7 + g[1] * CELL];
+  if (!lay.geo) {
+    const steps = ed => {
+      const out = [];
+      for (let i = 0; i < ed.pts.length - 1; i++) {
+        const [ax, ay] = ed.pts[i], [bx, by] = ed.pts[i + 1], sx = Math.sign(bx - ax), sy = Math.sign(by - ay);
+        let x = ax, y = ay;
+        while (x !== bx || y !== by) { out.push([[x, y], [x + sx, y + sy]]); x += sx; y += sy; }
+      }
+      return out;
+    };
+    const keyOf = (p, q) => (p[0] < q[0] || (p[0] === q[0] && p[1] < q[1])) ? [p[0] + "," + p[1] + "|" + q[0] + "," + q[1], p, q] : [q[0] + "," + q[1] + "|" + p[0] + "," + p[1], q, p];
+    const seg = new Map();
+    for (const ed of lay.edges) { ed.steps = steps(ed); for (const [p, q] of ed.steps) { const [k] = keyOf(p, q); let set = seg.get(k); if (!set) seg.set(k, set = new Set()); ed.lines.forEach(l => set.add(l)); } }
+    const bundle = new Map();
+    for (const [k, set] of seg) {
+      const ls = [...set].sort((a, b) => a.order - b.order), widths = ls.map(lw);
+      const total = widths.reduce((a, b) => a + b, 0) + gap * (ls.length - 1);
+      let cur = -total / 2; const off = new Map();
+      ls.forEach((l, i) => { off.set(l, cur + widths[i] / 2); cur += widths[i] + gap; });
+      bundle.set(k, { off, half: total / 2 });
+    }
+    for (const ed of lay.edges) {
+      ed.half = Math.max(...ed.steps.map(([p, q]) => bundle.get(keyOf(p, q)[0]).half));
+      for (const l of ed.lines) {
+        const pts = [], n = ed.steps.length;
+        ed.steps.forEach(([p, q], i) => {
+          const [k, c0, c1] = keyOf(p, q), b = bundle.get(k), o = b.off.get(l);
+          const dx = c1[0] - c0[0], dy = c1[1] - c0[1], L = Math.hypot(dx, dy), nx = -dy / L, ny = dx / L;
+          const P = toPx(p), Q = toPx(q), at = t => [P[0] + (Q[0] - P[0]) * t + nx * o, P[1] + (Q[1] - P[1]) * t + ny * o];
+          pts.push(at(i === 0 ? 0 : 0.28), at(i === n - 1 ? 1 : 0.72));
+        });
+        // drop points that sit on a straight run
+        const clean = [pts[0]];
+        for (let i = 1; i < pts.length - 1; i++) {
+          const a = clean[clean.length - 1], b = pts[i], c = pts[i + 1];
+          if (Math.abs((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])) > 0.5) clean.push(b);
+        }
+        clean.push(pts[pts.length - 1]);
+        const w = lw(l), dash = dashOf(l);
+        items.push({ t: "path", d: offsetPath(clean, 0, CELL * 0.3), stroke: colOf(l), width: w, dash: dash ? dash.map(v => v * w) : null, line: l });
+      }
+      for (const [p, q] of ed.steps) {
+        const P = toPx(p), Q = toPx(q), h = bundle.get(keyOf(p, q)[0]).half;
+        for (let s2 = 0; s2 <= 6; s2++) obstacles.push([P[0] + (Q[0] - P[0]) * s2 / 6, P[1] + (Q[1] - P[1]) * s2 / 6, h]);
+      }
+    }
+  } else for (const ed of lay.edges) {
+    const pts = ed.pts.map(toPx);
+    const widths = ed.lines.map(lw);
+    const total = widths.reduce((a, b) => a + b, 0) + gap * (widths.length - 1);
+    ed.half = total / 2;
+    let cursor = -total / 2;
+    ed.lines.forEach((l, i) => {
+      const off = cursor + widths[i] / 2; cursor += widths[i] + gap;
+      const dash = dashOf(l);
+      items.push({ t: "path", d: offsetPath(pts, off, CELL * 0.42), stroke: colOf(l), width: widths[i], dash: dash ? dash.map(v => v * widths[i]) : null, line: l });
+    });
+    for (let i = 0; i < pts.length - 1; i++) {
+      const L = Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]), st = Math.max(1, Math.round(L / 9));
+      for (let s2 = 0; s2 <= st; s2++) obstacles.push([pts[i][0] + (pts[i + 1][0] - pts[i][0]) * s2 / st, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * s2 / st, ed.half]);
+    }
+  }
+
+  // stops
+  const marks = [];
+  for (const n of lay.nodes) {
+    const [x, y] = px(n);
+    const inter = n.lines.size > 1;
+    let half = 0;
+    for (const ed of lay.edges) if (ed.a === n.id || ed.b === n.id) half = Math.max(half, ed.half);
+    const only = [...n.lines][0];
+    const r = inter ? Math.max(base * 0.95, half + base * 0.28) : Math.max(3.2, lw(only) * 0.62);
+    n.px = x; n.py = y; n.r = r; n.key = inter || n.ends > 0;
+    marks.push({ t: "circle", x, y, r, fill: sh.stop, stroke: inter ? sh.ink : colOf(only), sw: inter ? Math.max(2, base * 0.34) : Math.max(1.6, lw(only) * 0.36), station: n.id });
+  }
+
+  // town areas; their names go on top of the lines, at whichever corner is clearest
+  const areas = [], placed = [], townBoxes = [], townLabels = [];
+  if (opt.areas) for (const b of lay.blocks) {
+    if (!b.name) continue;
+    const xs = b.members.map(n => n.px), ys = b.members.map(n => n.py), pad = CELL * 0.62;
+    const box = [Math.min(...xs) - pad, Math.min(...ys) - pad, Math.max(...xs) + pad, Math.max(...ys) + pad];
+    b.box = box; townBoxes.push(b);
+    areas.push({ t: "rect", x: box[0], y: box[1], w: box[2] - box[0], h: box[3] - box[1], fill: sh.town, fo: 0.5, stroke: sh.townLine, sw: 3, rx: CELL * 0.3 });
+  }
+  for (const b of townBoxes) {
+    const label = b.name.toUpperCase(), tw = textW(label, 11, 800) + label.length * 1.5, box = b.box;
+    const cands = [[box[0] + 4, box[1] - 7, "start"], [box[2] - 4, box[1] - 7, "end"], [box[0] + 4, box[3] + 15, "start"], [box[2] - 4, box[3] + 15, "end"]];
+    let best = null, bs = Infinity;
+    cands.forEach((c, i) => {
+      const x0 = c[2] === "start" ? c[0] : c[0] - tw, r = [x0 - 2, c[1] - 11, x0 + tw + 2, c[1] + 3];
+      let sc = i;
+      for (const ob of obstacles) if (ob[0] > r[0] - ob[2] && ob[0] < r[2] + ob[2] && ob[1] > r[1] - ob[2] && ob[1] < r[3] + ob[2]) sc += 12;
+      for (const p of placed) if (r[0] < p[2] && r[2] > p[0] && r[1] < p[3] && r[3] > p[1]) sc += 200;
+      for (const o of townBoxes) if (o !== b && r[0] < o.box[2] && r[2] > o.box[0] && r[1] < o.box[3] && r[3] > o.box[1]) sc += 60;
+      if (sc < bs) { bs = sc; best = { c, r }; }
+    });
+    townLabels.push({ t: "text", x: best.c[0], y: best.c[1], s: label, size: 11, weight: 800, fill: sh.sub, anchor: best.c[2], ls: 1.5, halo: sh.bg });
+    placed.push(best.r);
+  }
+
+  // line badges at the ends of each line
+  const badges = [];
+  if (opt.badges) {
+    const bsize = 11, bh = 17;
+    for (const l of lay.lines) {
+      for (const id of l.ends) {
+        const n = lay.nodes.find(m => m.id === id); if (!n) continue;
+        const ed = lay.edges.find(e => e.lines.includes(l) && (e.a === id || e.b === id));
+        let dx = 0, dy = -1;
+        if (ed) {
+          const g = ed.a === id ? ed.pts[1] : ed.pts[ed.pts.length - 2], first = ed.a === id ? ed.pts[0] : ed.pts[ed.pts.length - 1];
+          dx = first[0] - g[0]; dy = first[1] - g[1]; const L = Math.hypot(dx, dy) || 1; dx /= L; dy /= L;
+        }
+        // try spots around the stop, starting in the direction the line ends, and take the first clear one
+        const bw = Math.max(26, textW(l.badge, bsize, 800) + 12);
+        const base = Math.atan2(dy, dx), turns = [0, 0.5, -0.5, 1, -1, 1.5, -1.5, 2].map(t => t * Math.PI / 4 * 2 / 2);
+        let best = null, bs = Infinity;
+        for (let ring = 0; ring < 3; ring++) turns.forEach((t, ti) => {
+          const ang = base + t * 2, ux = Math.cos(ang), uy = Math.sin(ang);
+          // distance so the badge edge clears the stop, whichever way it sits
+          const reach = n.r + 5 + Math.min(Math.abs(ux) > 1e-6 ? (bw / 2) / Math.abs(ux) : Infinity, Math.abs(uy) > 1e-6 ? (bh / 2) / Math.abs(uy) : Infinity) + ring * (bh + 4);
+          const cx = n.px + ux * reach, cy = n.py + uy * reach, r = [cx - bw / 2 - 2, cy - bh / 2 - 2, cx + bw / 2 + 2, cy + bh / 2 + 2];
+          let sc = ring * 30 + ti * 4;
+          for (const p of placed) if (r[0] < p[2] && r[2] > p[0] && r[1] < p[3] && r[3] > p[1]) sc += 300;
+          for (const m of lay.nodes) if (m.px > r[0] - m.r && m.px < r[2] + m.r && m.py > r[1] - m.r && m.py < r[3] + m.r) sc += 120;
+          for (const ob of obstacles) if (ob[0] > r[0] - ob[2] && ob[0] < r[2] + ob[2] && ob[1] > r[1] - ob[2] && ob[1] < r[3] + ob[2]) sc += 6;
+          if (sc < bs) { bs = sc; best = [cx, cy]; }
+        });
+        const [cx, cy] = best;
+        badges.push({ t: "rect", x: cx - bw / 2, y: cy - bh / 2, w: bw, h: bh, fill: sh.mono ? "#111111" : l.color, rx: 4, line: l });
+        badges.push({ t: "text", x: cx, y: cy + bsize * 0.36, s: l.badge, size: bsize, weight: 800, fill: sh.mono ? "#ffffff" : inkOn(l.color), anchor: "middle", line: l });
+        placed.push([cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2]);
+      }
+    }
+  }
+
+  // names: several positions per stop, long names on two lines, then a second pass to settle clashes
+  const labels = [];
+  if (opt.labels !== "none") {
+    const size = opt.fsize, lh = size * 1.12;
+    const shown = n => {
+      let name = n.name;
+      if (opt.names === "short" && / (station|halt)$/i.test(name) && name.split(" ").length > 1) name = name.replace(/ (station|halt)$/i, "");
+      if (opt.names !== "full" && n.block.name && name.startsWith(n.block.name + " ")) {
+        const rest = name.slice(n.block.name.length + 1).trim();
+        if (rest && !/^(station|central|centraal)$/i.test(rest)) name = rest;
+      }
+      if (name.length <= 15 || !name.includes(" ")) return [name];
+      const mid = name.length / 2; let cut = -1;
+      for (let i = 0; i < name.length; i++) if (name[i] === " " && (cut < 0 || Math.abs(i - mid) < Math.abs(cut - mid))) cut = i;
+      return [name.slice(0, cut), name.slice(cut + 1)];
+    };
+    const todo = lay.nodes.filter(n => opt.labels === "all" || n.key).sort((a, b) => (b.key - a.key) || (b.lines.size - a.lines.size));
+    const info = todo.map(n => {
+      const rows = shown(n), weight = n.key ? 800 : 600, w = Math.max(...rows.map(r => textW(r, size, weight)));
+      const h = lh * (rows.length - 1), g = n.r + 5, dg = g * 0.74, far = g + CELL * 0.32, cand = [];
+      const add = (anchor, dx, dy) => cand.push([anchor, dx, dy]);
+      // dy is the baseline of the first row
+      add("start", g, size * 0.36 - h / 2); add("end", -g, size * 0.36 - h / 2);
+      add("middle", 0, -g - 2 - h); add("middle", 0, g + size * 0.86);
+      add("start", dg, -dg + 1 - h); add("start", dg, dg + size * 0.72); add("end", -dg, -dg + 1 - h); add("end", -dg, dg + size * 0.72);
+      add("start", far, size * 0.36 - h / 2); add("end", -far, size * 0.36 - h / 2); add("middle", 0, -far - 2 - h); add("middle", 0, far + size * 0.86);
+      // last resort: further out, joined to the stop by a thin pointer line
+      const L = g + CELL * 1.05, dl2 = L * 0.74;
+      const lead = (anchor, dx, dy) => cand.push([anchor, dx, dy, true]);
+      lead("start", L, size * 0.36 - h / 2); lead("end", -L, size * 0.36 - h / 2); lead("middle", 0, -L - h); lead("middle", 0, L + size * 0.86);
+      lead("start", dl2, -dl2 - h); lead("start", dl2, dl2 + size * 0.72); lead("end", -dl2, -dl2 - h); lead("end", -dl2, dl2 + size * 0.72);
+      return { n, rows, weight, w, h, cand, pick: null };
+    });
+    const boxOf = (it, c) => {
+      const tx = it.n.px + c[1], ty = it.n.py + c[2];
+      const x0 = c[0] === "start" ? tx : c[0] === "end" ? tx - it.w : tx - it.w / 2;
+      return { tx, ty, anchor: c[0], lead: !!c[3], box: [x0, ty - size * 0.82, x0 + it.w, ty + it.h + size * 0.24] };
+    };
+    const score = (it, o, i) => {
+      const [x0, y0, x1, y1] = o.box; let s = i * 0.5 + (o.lead ? 40 : 0);
+      for (const ob of obstacles) if (ob[0] > x0 - ob[2] - 2 && ob[0] < x1 + ob[2] + 2 && ob[1] > y0 - ob[2] - 2 && ob[1] < y1 + ob[2] + 2) s += 9;
+      for (const m of lay.nodes) if (m !== it.n && m.px > x0 - m.r - 1 && m.px < x1 + m.r + 1 && m.py > y0 - m.r - 1 && m.py < y1 + m.r + 1) s += 70;
+      for (const p of placed) if (x0 < p[2] + 3 && x1 > p[0] - 3 && y0 < p[3] + 2 && y1 > p[1] - 2) s += 220;
+      for (const ot of info) if (ot !== it && ot.pick) { const p = ot.pick.box; if (x0 < p[2] + 3 && x1 > p[0] - 3 && y0 < p[3] + 2 && y1 > p[1] - 2) s += 220; }
+      for (const b of townBoxes) if (b !== it.n.block && x0 < b.box[2] && x1 > b.box[0] && y0 < b.box[3] && y1 > b.box[1]) s += 30;
+      if (x0 < MARGIN * 0.35 || x1 > W - MARGIN * 0.35) s += 2000;   // keep names on the sheet
+      return s;
+    };
+    for (let pass = 0; pass < 3; pass++) for (const it of info) {
+      let best = null, bs = Infinity;
+      it.cand.forEach((c, i) => { const o = boxOf(it, c), sc = score(it, o, i); if (sc < bs) { bs = sc; best = o; } });
+      it.pick = best;
+    }
+    for (const it of info) if (it.pick.lead) {
+      // pointer from the stop's edge to the nearest point of the name
+      const b = it.pick.box, n = it.n, cx = Math.max(b[0], Math.min(n.px, b[2])), cy = Math.max(b[1], Math.min(n.py, b[3]));
+      const d = Math.hypot(cx - n.px, cy - n.py) || 1, ux = (cx - n.px) / d, uy = (cy - n.py) / d;
+      labels.push({ t: "path", d: [["M", n.px + ux * (n.r + 2), n.py + uy * (n.r + 2)], ["L", cx - ux * 3, cy - uy * 3]], stroke: sh.sub, width: 1.2, butt: true });
+    }
+    for (const it of info) it.rows.forEach((row, i) =>
+      labels.push({ t: "text", station: it.n.id, x: it.pick.tx, y: it.pick.ty + i * lh, s: row, size, weight: it.weight, fill: sh.ink, anchor: it.pick.anchor, halo: (b => b && (it.pick.box[0] + it.pick.box[2]) / 2 > b[0] && (it.pick.box[0] + it.pick.box[2]) / 2 < b[2] && (it.pick.box[1] + it.pick.box[3]) / 2 > b[1] && (it.pick.box[1] + it.pick.box[3]) / 2 < b[3] ? sh.town : sh.bg)(it.n.block.box) }));
+  }
+
+  // framing: crop the map to what is drawn (plus a margin), then move everything into place
+  const all = [...lay.nodes.map(n => [n.px - n.r, n.py - n.r, n.px + n.r, n.py + n.r]), ...placed, ...townBoxes.map(b => b.box)];
+  for (const it of labels) { if (it.t !== "text") continue; const w2 = textW(it.s, it.size, it.weight); const x0 = it.anchor === "start" ? it.x : it.anchor === "end" ? it.x - w2 : it.x - w2 / 2; all.push([x0, it.y - it.size, x0 + w2, it.y + 4]); }
+  let crop = [MARGIN * 0.25, HEAD + 2, W - MARGIN * 0.25, HEAD + MARGIN * 0.7 + mapH + MARGIN * 0.55];
+  let dx = 0, dy = 0;
+  if (opt.fixed) {
+    // time machine: keep the frame of the full network so nothing jumps while it grows
+    ({ dx, dy, W } = opt.fixed); crop = opt.fixed.crop.slice();
+  } else if (opt.tight && all.length) {
+    const pad = CELL * 0.9;
+    const c = [Math.min(...all.map(r => r[0])) - pad, Math.min(...all.map(r => r[1])) - pad, Math.max(...all.map(r => r[2])) + pad, Math.max(...all.map(r => r[3])) + pad];
+    dx = MARGIN * 0.25 - c[0]; dy = HEAD + 2 - c[1];
+    crop = [c[0] + dx, c[1] + dy, c[2] + dx, c[3] + dy];
+    W = Math.max(560, crop[2] + MARGIN * 0.25);
+  }
+  // water, warped from game coordinates onto the schematic, clipped to the map area
+  const waterItems = [];
+  if (opt.water && net.water && (opt.warpNodes || lay.nodes).length >= 3) {
+    const warp = makeWarp((opt.warpNodes || lay.nodes).filter(n => n.px != null));
+    if (warp) {
+      const pre = [crop[0] - dx, crop[1] - dy, crop[2] - dx, crop[3] - dy];
+      const shapes = waterShapes(net.water, warp, pre);
+      if (shapes.length) {
+        waterItems.push({ t: "clip", box: pre });
+        waterItems.push({ t: "multipoly", polys: shapes, fill: sh.water, evenodd: true });
+        waterItems.push({ t: "multipoly", polys: shapes, stroke: sh.shore, width: 1.4 });
+        waterItems.push({ t: "unclip" });
+      }
+    }
+  }
+  const mapItems = [...waterItems, ...areas, ...items, ...marks, ...badges, ...townLabels, ...labels];
+  if (dx || dy) for (const it of mapItems) shiftItem(it, dx, dy);
+  const mapBottom = crop[3];
+
+  // legend, grouped by carrier
+  const legend = [], lsize = 13, rowH = 23;
+  let ly = mapBottom + MARGIN * 0.55;
+  legend.push({ t: "path", d: [["M", MARGIN - 20, ly - 26], ["L", W - MARGIN + 20, ly - 26]], stroke: sh.rule, width: 1.5, butt: true });
+  const colW = Math.min(W - MARGIN * 2 + 40, Math.max(170, ...lay.lines.map(l => textW(l.name, lsize, 600) + 74 + (opt.badges ? 44 : 0))));
+  const ncol = Math.max(1, Math.floor((W - MARGIN * 2 + 40) / colW));
+  for (const [code, label] of CARRIERS) {
+    const group = lay.lines.filter(l => l.carrier === code);
+    if (!group.length) continue;
+    legend.push({ t: "text", x: MARGIN - 20, y: ly, s: label.toUpperCase(), size: 11, weight: 800, fill: sh.sub, anchor: "start", ls: 1.6 });
+    ly += 20;
+    group.forEach((l, i) => {
+      const cx = MARGIN - 20 + (i % ncol) * colW, cy = ly + Math.floor(i / ncol) * rowH, w = lw(l), dash = dashOf(l);
+      legend.push({ t: "path", d: [["M", cx + 4, cy - 4.5], ["L", cx + 44, cy - 4.5]], stroke: colOf(l), width: Math.min(w, 9), dash: dash ? dash.map(v => v * Math.min(w, 9)) : null });
+      let tx = cx + 56;
+      if (opt.badges) {
+        const bw = Math.max(26, textW(l.badge, 11, 800) + 12);
+        legend.push({ t: "rect", x: tx, y: cy - 13, w: bw, h: 17, fill: sh.mono ? "#111111" : l.color, rx: 4 });
+        legend.push({ t: "text", x: tx + bw / 2, y: cy - 0.5, s: l.badge, size: 11, weight: 800, fill: sh.mono ? "#ffffff" : inkOn(l.color), anchor: "middle" });
+        tx += bw + 8;
+      }
+      legend.push({ t: "text", x: tx, y: cy, s: l.name + (l.cargoTypes && l.cargoTypes.length ? "  ·  " + l.cargoTypes.join(", ") : ""), size: lsize, weight: 600, fill: sh.ink, anchor: "start" });
+    });
+    ly += Math.ceil(group.length / ncol) * rowH + 14;
+  }
+  const H = ly + 26;
+
+  // header
+  const head = [{ t: "rect", x: 0, y: 0, w: W, h: H, fill: sh.bg },
+    { t: "rect", x: 0, y: 0, w: W, h: 12, fill: sh.ink },
+    { t: "text", x: MARGIN - 20, y: 66, s: opt.title || "Network Map", size: 38, weight: 800, fill: sh.ink, anchor: "start", ls: -0.6 }];
+  const facts = [opt.yearLabel ? opt.yearLabel : net.year ? "Year " + net.year : null, lay.lines.length + (lay.lines.length === 1 ? " line" : " lines"), lay.nodes.length + " stops"].filter(Boolean).join("  ·  ");
+  head.push({ t: "text", x: MARGIN - 20, y: 92, s: facts, size: 14, weight: 600, fill: sh.sub, anchor: "start", ls: 0.4 });
+  head.push({ t: "path", d: [["M", MARGIN - 20, HEAD], ["L", W - MARGIN + 20, HEAD]], stroke: sh.rule, width: 1.5, butt: true });
+  if (!lay.nodes.length) head.push({ t: "text", x: W / 2, y: HEAD + 90, s: "No lines selected", size: 18, weight: 600, fill: sh.sub, anchor: "middle" });
+
+  if (opt.fresh) for (const it of mapItems) {
+    if ((it.line && opt.fresh.lines.has(it.line)) || (it.station != null && opt.fresh.stations.has(it.station))) it.fresh = true;
+  }
+  return { w: W, h: H, items: [...head, ...mapItems, ...legend], px, off: [dx, dy], fixed: { dx, dy, W, crop: crop.slice() } };
+}
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const f1 = v => Math.round(v * 10) / 10;
+function toSvgInner(dl) {
+  let clipN = 0;
+  return dl.items.map(it => {
+    if (it.t === "clip") { clipN++; const b = it.box; return `<clipPath id="wclip${clipN}"><rect x="${f1(b[0])}" y="${f1(b[1])}" width="${f1(b[2] - b[0])}" height="${f1(b[3] - b[1])}"/></clipPath><g clip-path="url(#wclip${clipN})">`; }
+    if (it.t === "unclip") return "</g>";
+    if (it.t === "multipoly") return `<path d="${it.polys.map(pts => "M" + pts.map(p => f1(p[0]) + " " + f1(p[1])).join("L") + "Z").join("")}" ${it.fill ? `fill="${it.fill}" fill-rule="evenodd"` : `fill="none" stroke="${it.stroke}" stroke-width="${it.width}" stroke-linejoin="round"`}/>`;
+    const dline = it.line ? ` data-line="${esc(String(it.line.id))}"` : "";
+    if (it.t === "rect") return `<rect${dline}${it.fresh ? ` class="pop"` : ""} x="${f1(it.x)}" y="${f1(it.y)}" width="${f1(it.w)}" height="${f1(it.h)}" fill="${it.fill}"${it.fo != null ? ` fill-opacity="${it.fo}"` : ""}${it.stroke ? ` stroke="${it.stroke}" stroke-width="${f1(it.sw || 1)}"` : ""}${it.rx ? ` rx="${f1(it.rx)}"` : ""}/>`;
+    if (it.t === "path") return `<path${dline}${it.fresh && !it.dash ? ` class="drawin" pathLength="1"` : it.fresh ? ` class="fadein"` : ""} d="${it.d.map(c => c[0] + c.slice(1).map(f1).join(" ")).join("")}" fill="none" stroke="${it.stroke}" stroke-width="${f1(it.width)}" stroke-linecap="${it.butt || it.dash ? "butt" : "round"}" stroke-linejoin="round"${it.dash ? ` stroke-dasharray="${it.dash.map(f1).join(" ")}"` : ""}/>`;
+    if (it.t === "circle") return `<circle${it.fresh ? ` class="pop"` : ""} cx="${f1(it.x)}" cy="${f1(it.y)}" r="${f1(it.r)}" fill="${it.fill}" stroke="${it.stroke}" stroke-width="${f1(it.sw)}"${it.station != null ? ` data-station="${it.station}"` : ""}/>`;
+    return `<text${dline}${it.fresh ? ` class="fadein"` : ""} x="${f1(it.x)}" y="${f1(it.y)}" font-family='${FONT}' font-size="${it.size}" font-weight="${it.weight}" fill="${it.fill}" text-anchor="${it.anchor}"${it.ls ? ` letter-spacing="${it.ls}"` : ""}${it.halo ? ` stroke="${it.halo}" stroke-width="${f1(it.size * 0.3)}" stroke-linejoin="round" paint-order="stroke"` : ""}>${esc(it.s)}</text>`;
+  }).join("");
+}
+function toSvgFile(dl) { return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${dl.w} ${Math.ceil(dl.h)}" width="${dl.w}" height="${Math.ceil(dl.h)}">${toSvgInner(dl)}</svg>`; }
+function toCanvas(dl, scale) {
+  const c = document.createElement("canvas"); c.width = Math.round(dl.w * scale); c.height = Math.round(dl.h * scale);
+  const g = c.getContext("2d"); g.scale(scale, scale); g.lineJoin = "round";
+  for (const it of dl.items) {
+    if (it.t === "clip") { g.save(); g.beginPath(); g.rect(it.box[0], it.box[1], it.box[2] - it.box[0], it.box[3] - it.box[1]); g.clip(); continue; }
+    if (it.t === "unclip") { g.restore(); continue; }
+    if (it.t === "multipoly") {
+      g.beginPath(); for (const pts of it.polys) { pts.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.closePath(); }
+      if (it.fill) { g.fillStyle = it.fill; g.fill("evenodd"); } else { g.strokeStyle = it.stroke; g.lineWidth = it.width; g.stroke(); }
+      continue;
+    }
+    if (it.t === "rect") {
+      g.beginPath(); if (it.rx && g.roundRect) g.roundRect(it.x, it.y, it.w, it.h, it.rx); else g.rect(it.x, it.y, it.w, it.h);
+      g.fillStyle = it.fill; g.globalAlpha = it.fo != null ? it.fo : 1; g.fill(); g.globalAlpha = 1;
+      if (it.stroke) { g.strokeStyle = it.stroke; g.lineWidth = it.sw || 1; g.stroke(); }
+    }
+    else if (it.t === "path") {
+      g.beginPath();
+      for (const c2 of it.d) { if (c2[0] === "M") g.moveTo(c2[1], c2[2]); else if (c2[0] === "L") g.lineTo(c2[1], c2[2]); else g.quadraticCurveTo(c2[1], c2[2], c2[3], c2[4]); }
+      g.strokeStyle = it.stroke; g.lineWidth = it.width; g.lineCap = it.butt || it.dash ? "butt" : "round"; g.setLineDash(it.dash || []); g.stroke(); g.setLineDash([]);
+    } else if (it.t === "circle") { g.beginPath(); g.arc(it.x, it.y, it.r, 0, Math.PI * 2); g.fillStyle = it.fill; g.fill(); g.strokeStyle = it.stroke; g.lineWidth = it.sw; g.stroke(); }
+    else {
+      g.font = `${it.weight} ${it.size}px ${FONT}`; g.textAlign = it.anchor === "middle" ? "center" : it.anchor; g.textBaseline = "alphabetic";
+      try { g.letterSpacing = (it.ls || 0) + "px"; } catch (e) { /* older engines ignore spacing */ }
+      if (it.halo) { g.strokeStyle = it.halo; g.lineWidth = it.size * 0.3; g.strokeText(it.s, it.x, it.y); }
+      g.fillStyle = it.fill; g.fillText(it.s, it.x, it.y);
+    }
+  }
+  return c;
+}
+
+
+/* ---------- names, badges and the sign at the top ---------- */
+const GROUP_NAME = { RAIL: "Rail", TRAM: "Tram", ROAD: "Bus and road", WATER: "Ferry and shipping", AIR: "Air", OTHER: "Other" };
+
+function siteFacts() {
+  const used = new Set(), servedBy = new Map();
+  for (const l of net.lines) for (const id of new Set(l.seq)) { used.add(id); (servedBy.get(id) || servedBy.set(id, []).get(id)).push(l); }
+  const townCount = new Map();
+  for (const id of used) { const t = net.towns.get(net.stations.get(id).town); if (t) townCount.set(t.name, (townCount.get(t.name) || 0) + 1); }
+  const towns = [...townCount.entries()].sort((a, b) => b[1] - a[1]).map(e => e[0]);
+  return { used, servedBy, towns };
+}
+function badgeHtml(l) {
+  return `<span class="bdg" style="background:${l.color};color:${inkOn(l.color)}" title="${esc(l.name)}">${esc(l.badge)}</span>`;
+}
+
+function routeOf(l) {
+  const seq = [...new Set(l.seq)], first = net.stations.get(seq[0]).name;
+  if (l.ends && l.ends.length === 1 && l.seq.length > 2) return "Circular from " + first;
+  const ends = l.ends && l.ends.length === 2 ? l.ends.map(id => net.stations.get(id).name) : [first, net.stations.get(seq[seq.length - 1]).name];
+  return ends[0] + " to " + ends[1];
+}
+
+function renderSite() {
+  const f = siteFacts(), year = net.year, lines = net.lines.length, stops = f.used.size;
+  $("hdMeta").textContent = [year ? "Network in " + year : null, lines + (lines === 1 ? " line" : " lines"), stops + (stops === 1 ? " stop" : " stops")].filter(Boolean).join("  \u00b7  ");
+  document.title = "Route Map" + (year ? " \u00b7 " + year : "");
+}
+
+/* ---------- line pages ---------- */
+let pageLine = null;
+function fmtInterval(sec) {
+  if (!(sec > 0) || !isFinite(sec)) return null;
+  if (sec < 90) return Math.round(sec) + " s";
+  const m = Math.floor(sec / 60), r = Math.round(sec % 60);
+  return m + " min" + (r ? " " + r + " s" : "");
+}
+function openLine(l) {
+  pageLine = l;
+  const f = siteFacts(), seq = [...new Set(l.seq)], loop = l.ends && l.ends.length === 1 && l.seq.length > 2;
+  const first = net.stations.get(seq[0]).name, ends = l.ends && l.ends.length === 2 ? l.ends.map(id => net.stations.get(id).name) : [first, net.stations.get(seq[seq.length - 1]).name];
+  const route = loop ? "Circular from " + first : ends[0] + " to " + ends[1];
+  const card = $("linePage").querySelector(".lp-card");
+  card.style.setProperty("--lc", l.color);
+  $("lpHead").innerHTML = `${badgeHtml(l)}<div><h2 id="lpTitle">${esc(route)}</h2><p>${esc(l.name)} · ${esc(GROUP_NAME[l.carrier])}${l.cargo ? " · freight" : ""}</p></div>`;
+  const facts = [["Stops", seq.length]];
+  if (l.vehicles != null) facts.push(["Vehicles", l.vehicles]);
+  if (l.load && l.load.capacity > 0) facts.push(["Load right now", Math.round(100 * l.load.used / l.load.capacity) + "%"]);
+  if (l.load && l.load.capacity > 0) facts.push(["Capacity", l.load.capacity]);
+  const iv = l.maxFrequency > 0 ? fmtInterval(1 / l.maxFrequency) : null;
+  if (iv) facts.push(["Runs every", iv]);
+  const towns = [...new Set(seq.map(id => net.towns.get(net.stations.get(id).town)).filter(Boolean).map(t => t.name))];
+  facts.push(["Towns", towns.length]);
+  if (l.cargoTypes && l.cargoTypes.length) facts.push(["Carries", l.cargoTypes.join(", ")]);
+  $("lpFacts").innerHTML = facts.map(x => `<div><dt>${x[0]}</dt><dd>${esc(x[1])}</dd></div>`).join("");
+  renderOpened(l);
+  $("lpNote").hidden = l.vehicles != null;
+  // stop list, in running order
+  $("lpStops").innerHTML = seq.map(id => {
+    const st = net.stations.get(id), town = net.towns.get(st.town), others = (f.servedBy.get(id) || []).filter(o => o !== l);
+    return `<li class="${others.length ? "x" : ""}"><b>${esc(st.name)}</b><span>${esc(town ? town.name : "Outside town")}</span>${others.length ? `<span class="bdgs">${others.map(o => badgeHtml(o)).join("")}</span>` : ""}</li>`;
+  }).join("") + (loop ? `<li><b>${esc(first)}</b><span>Back to the start of the loop</span></li>` : "");
+  // mini map: the whole map faded, this line on top, framed on the line
+  $("lpMini").innerHTML = lineMapSvg(l);
+  $("linePage").hidden = false; document.body.style.overflow = "hidden";
+  $("linePage").scrollTop = 0; $("lpClose").focus({ preventScroll: true });
+}
+function renderOpened(l) {
+  const box = $("lpOpen"), op = timeline && timeline.lineOpen.get(l);
+  if (op == null) { box.hidden = true; return; }
+  box.hidden = false;
+  const y = Math.floor(op + 1e-9), m = Math.min(11, Math.floor((op - y) * 12 + 1e-6)), manual = l.openFrom === "manual";
+  const sure = manual || l.openFrom === "history" || l.openFrom === "finance" || l.openFrom === "log";
+  $("lpOpenDate").textContent = (sure ? "" : "about ") + MONTHS[m] + " " + y;
+  $("lpOpenFrom").textContent = OPEN_FROM[l.openFrom] || "";
+  $("lpOpenMonth").value = String(m); $("lpOpenYear").value = String(y);
+  $("lpOpenReset").hidden = !manual;
+  $("lpOpenReset").textContent = manual && l.autoOpen != null ? "Use the found date (" + dateText(l.autoOpen, true) + ")" : "Use the found date";
+  box.classList.toggle("set", manual);
+}
+function saveOpened(t) {
+  const l = pageLine; if (!l) return;
+  setOpened(net, l.id, t);
+  redraw(false); openLine(l);
+}
+$("lpOpenMonth").innerHTML = MONTHS.map((x, i) => `<option value="${i}">${x}</option>`).join("");
+$("lpOpenSave").addEventListener("click", () => {
+  const y = parseInt($("lpOpenYear").value, 10), m = +$("lpOpenMonth").value;
+  if (!(y > 1000 && y < 3000)) { $("lpOpenYear").focus(); return; }
+  saveOpened(y + (m + 0.5) / 12);
+});
+$("lpOpenYear").addEventListener("keydown", e => { if (e.key === "Enter") $("lpOpenSave").click(); });
+$("lpOpenReset").addEventListener("click", () => saveOpened(null));
+function lineBox(l) {
+  const ids = new Set(l.seq), ns = lay.nodes.filter(n => ids.has(n.id));
+  if (!ns.length || !dl) return null;
+  const [ox, oy] = dl.off;
+  const x0 = Math.min(...ns.map(n => n.px)) + ox, x1 = Math.max(...ns.map(n => n.px)) + ox, y0 = Math.min(...ns.map(n => n.py)) + oy, y1 = Math.max(...ns.map(n => n.py)) + oy;
+  return [x0, y0, x1, y1];
+}
+function lineMapSvg(l) {
+  const b = lineBox(l);
+  if (!b) return `<p class="lp-note" style="padding:16px">This line is turned off. Switch it on in Settings to see it here.</p>`;
+  let [x0, y0, x1, y1] = b; const pad = CELL * 1.6;
+  x0 -= pad; y0 -= pad; x1 += pad; y1 += pad;
+  // keep a 4:3 frame
+  let w = x1 - x0, h = y1 - y0;
+  if (w / h > 4 / 3) { const nh = w * 3 / 4; y0 -= (nh - h) / 2; h = nh; } else { const nw = h * 4 / 3; x0 -= (nw - w) / 2; w = nw; }
+  const ids = new Set(l.seq);
+  const mine = dl.items.filter(it => it.line === l || (it.t === "circle" && ids.has(it.station)));
+  return `<svg viewBox="${f1(x0)} ${f1(y0)} ${f1(w)} ${f1(h)}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Map of this line"><g opacity="0.3">${toSvgInner(dl)}</g>${toSvgInner({ items: mine })}</svg>`;
+}
+function closeLine() { $("linePage").hidden = true; document.body.style.overflow = ""; pageLine = null; }
+$("lpClose").addEventListener("click", closeLine);
+$("linePage").addEventListener("click", ev => { if (ev.target === $("linePage")) closeLine(); });
+document.addEventListener("keydown", ev => { if (ev.key === "Escape" && !$("linePage").hidden) closeLine(); });
+$("lpShow").addEventListener("click", () => {
+  const l = pageLine; closeLine();
+  const b = l && lineBox(l); if (!b) return;
+  const r = view.getBoundingClientRect(), pad = CELL * 2;
+  let w = b[2] - b[0] + pad * 2, h = b[3] - b[1] + pad * 2;
+  if (w / h > r.width / r.height) h = w * r.height / r.width; else w = h * r.width / r.height;
+  vb = [(b[0] + b[2]) / 2 - w / 2, (b[1] + b[3]) / 2 - h / 2, w, h]; applyVb();
+});
+/* ---------- state and wiring ---------- */
+let net = null, lay = null, dl = null, vb = null, fitted = false;
+const view = $("view");
+const opts = () => ({
+  carriers: new Set([...document.querySelectorAll("#carriers input:checked")].map(i => i.value)),
+  even: +$("even").value / 100, density: +$("dens").value / 100, thick: +$("thick").value / 100,
+  title: $("title").value.trim(), geo: $("layoutMode").value === "geo", tight: $("tight").checked, badges: $("badges").checked, water: $("water").checked, areas: $("areas").checked, names: $("names").value, net: $("netMode").value, labels: $("labels").value, fsize: +$("fsize").value, sheet: $("sheet").value
+});
+function redraw(refit) {
+  $("evenOut").textContent = $("even").value + "%"; $("densOut").textContent = $("dens").value + "%";
+  $("thickOut").textContent = $("thick").value + "%"; $("fsizeOut").textContent = $("fsize").value + " px";
+  const o = opts(); lay = layout(net, o); fullDl = dl = build(net, lay, o);
+  timeline = computeTimeline(net);
+  if (!timeline) { tmT = null; tmPlaying = false; }
+  view.innerHTML = toSvgInner(dl);
+  if (refit || !fitted) fit(); else applyVb();
+  tmShownSig = timeline ? [...visibleAt(timeline.end)].map(l => l.id).join(",") : ""; prevVis = null;
+  if (timeline && tmT != null) drawAt(tmT, false);
+  renderSite();
+  renderTimelineUi();
+}
+function applyVb() { view.setAttribute("viewBox", vb.map(f1).join(" ")); }
+function fit() {
+  const r = view.getBoundingClientRect(); if (!r.width || !r.height || !dl) return;
+  const pad = 10, s = Math.min((r.width - pad * 2) / dl.w, (r.height - pad * 2) / dl.h);
+  const w = r.width / s, h = r.height / s;
+  vb = [dl.w / 2 - w / 2, dl.h / 2 - h / 2, w, h]; fitted = true; applyVb();
+}
+function zoom(f, cx, cy) {
+  const r = view.getBoundingClientRect();
+  const mx = cx == null ? 0.5 : (cx - r.left) / r.width, my = cy == null ? 0.5 : (cy - r.top) / r.height;
+  const nw = Math.max(120, Math.min(dl.w * 6, vb[2] * f)), k = nw / vb[2];
+  vb = [vb[0] + vb[2] * mx * (1 - k), vb[1] + vb[3] * my * (1 - k), nw, vb[3] * k]; applyVb();
+}
+const toSheet = ev => { const r = view.getBoundingClientRect(); return [vb[0] + (ev.clientX - r.left) / r.width * vb[2], vb[1] + (ev.clientY - r.top) / r.height * vb[3]]; };
+
+function prepare(n) { applyColors(n, $("colors").value); assignBadges(n); return n; }
+function buildFilters() {
+  const present = new Set(net.lines.map(l => l.carrier));
+  $("carriers").innerHTML = CARRIERS.filter(c => present.has(c[0])).map(c => `<label class="chip"><input type="checkbox" id="car-${c[0]}" value="${c[0]}" checked>${c[1]}</label>`).join("");
+  $("lines").innerHTML = net.lines.map((l, i) => `<label><input type="checkbox" id="line-${i}" data-i="${i}" ${l.on ? "checked" : ""}><span class="sw" style="background:${l.color}"></span><span class="nm" title="${esc(l.name)}">${esc(l.name)}</span><span class="ct">${l.seq.length}</span></label>`).join("") || "<span>No lines in this file.</span>";
+}
+function setStatus(msg, bad) { const s = $("status"); s.textContent = msg; s.classList.toggle("bad", !!bad); }
+function load(text, label) {
+  try {
+    const n = prepare(toNetwork(parseExport(text)));
+    net = n; pins.clear(); buildFilters(); redraw(true);
+    let msg = "";
+    if (n.missing) msg += `${n.missing} stops had no position and were left out. `;
+    if (n.diagnostics.length) msg += `The mod could not read ${n.diagnostics.length} things from the game (${n.diagnostics.slice(0, 4).map(d => d.call).join(", ")}).`;
+    setStatus(msg, false);
+    showApp();
+  } catch (e) { setStatus(e.message, true); showGate(); }
+}
+/* two screens: the sign to drop the export on, and the map */
+function showApp() {
+  const was = $("map").hidden;
+  $("gate").hidden = true; $("map").hidden = false;
+  if (was) requestAnimationFrame(() => fit());
+}
+function showGate() { $("map").hidden = true; $("gate").hidden = false; }
+$("dropSign").addEventListener("click", () => pickExport());
+$("dropSign").addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); pickExport(); } });
+
+$("file").addEventListener("change", ev => { const f = ev.target.files[0]; if (f) f.text().then(t => load(t, f.name)); ev.target.value = ""; });
+// drop an export anywhere on the page
+let dragDepth = 0;
+const dragOn = on => { if (!$("gate").hidden) { $("dropSign").classList.toggle("over", on); $("dropzone").hidden = true; } else $("dropzone").hidden = !on; };
+document.addEventListener("dragenter", ev => { if ([...(ev.dataTransfer?.types || [])].includes("Files")) { dragDepth++; dragOn(true); } });
+document.addEventListener("dragleave", () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) dragOn(false); });
+document.addEventListener("dragover", ev => ev.preventDefault());
+document.addEventListener("drop", ev => {
+  ev.preventDefault(); dragDepth = 0; dragOn(false);
+  const f = ev.dataTransfer.files[0]; if (f) f.text().then(t => load(t, f.name));
+});
+// map studio drawer
+const studio = $("studio");
+const setStudio = open => { studio.classList.toggle("open", open); $("scrim").hidden = !open; if (open) $("studioClose").focus(); };
+$("studioOpen").addEventListener("click", () => setStudio(true));
+$("studioClose").addEventListener("click", () => setStudio(false));
+$("scrim").addEventListener("click", () => setStudio(false));
+document.addEventListener("keydown", ev => { if (ev.key === "Escape" && studio.classList.contains("open")) setStudio(false); });
+// settings tabs: one section at a time, the last one used is remembered
+const TAB_KEY = "tf3-route-map-tab";
+function showTab(name) {
+  for (const b of $("tabs").querySelectorAll("[data-tab]")) b.setAttribute("aria-selected", b.dataset.tab === name ? "true" : "false");
+  for (const sec of studio.querySelectorAll("section[data-tab]")) sec.hidden = sec.dataset.tab !== name;
+  try { localStorage.setItem(TAB_KEY, name); } catch (e) { /* not kept */ }
+}
+$("tabs").addEventListener("click", ev => { const b = ev.target.closest("[data-tab]"); if (b) showTab(b.dataset.tab); });
+try { showTab(localStorage.getItem(TAB_KEY) || "lines"); } catch (e) { showTab("lines"); }
+$("carriers").addEventListener("change", () => redraw(true));
+$("lines").addEventListener("change", ev => { const i = ev.target.dataset.i; if (i != null) { net.lines[+i].on = ev.target.checked; redraw(true); } });
+const setAll = v => { net.lines.forEach(l => l.on = v); buildFilters(); redraw(true); };
+$("allOn").addEventListener("click", () => setAll(true)); $("allOff").addEventListener("click", () => setAll(false));
+["even", "dens"].forEach(id => $(id).addEventListener("input", () => { pins.clear(); redraw(true); }));
+$("layoutMode").addEventListener("change", () => redraw(true));
+$("netMode").addEventListener("change", () => redraw(true));
+["thick", "fsize", "title"].forEach(id => $(id).addEventListener("input", () => redraw(false)));
+$("colors").addEventListener("change", () => { applyColors(net, $("colors").value); buildFilters(); redraw(false); });
+["labels", "sheet", "areas", "names", "badges", "water", "tight"].forEach(id => $(id).addEventListener("change", () => redraw(false)));
+$("unpin").addEventListener("click", () => { pins.clear(); redraw(false); });
+$("fit").addEventListener("click", fit); $("zin").addEventListener("click", () => zoom(0.8)); $("zout").addEventListener("click", () => zoom(1.25));
+view.addEventListener("wheel", ev => { ev.preventDefault(); zoom(ev.deltaY > 0 ? 1.12 : 0.89, ev.clientX, ev.clientY); }, { passive: false });
+
+// drag the sheet to pan; shift-drag a stop to move it to another grid cell; a click on a line opens it
+let drag = null;
+view.addEventListener("pointerdown", ev => {
+  if (ev.button !== 0 || !vb) return;
+  ev.preventDefault();   // no text selection or native image drag while panning
+  const hit = ev.target.closest && ev.target.closest("[data-line]");
+  const sid = lay && !lay.geo && ev.shiftKey && ev.target.dataset ? ev.target.dataset.station : null;
+  const r = view.getBoundingClientRect();
+  drag = { x: ev.clientX, y: ev.clientY, vb0: vb.slice(), sx: vb[2] / r.width, sy: vb[3] / r.height, moved: false,
+    line: hit ? hit.getAttribute("data-line") : null, station: sid != null ? +sid : null, el: ev.target, id: ev.pointerId };
+  try { view.setPointerCapture(ev.pointerId); } catch (e) { /* window listeners below still follow the pointer */ }
+});
+function dragMove(ev) {
+  if (!drag || ev.pointerId !== drag.id) return;
+  const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y;
+  if (!drag.moved && Math.hypot(dx, dy) < 4) return;
+  drag.moved = true;
+  if (drag.station != null) { const p = toSheet(ev); drag.el.setAttribute("cx", f1(p[0])); drag.el.setAttribute("cy", f1(p[1])); drag.at = p; return; }
+  view.classList.add("panning");
+  vb[0] = drag.vb0[0] - dx * drag.sx; vb[1] = drag.vb0[1] - dy * drag.sy; applyVb();
+}
+function dragEnd(ev) {
+  if (!drag || (ev && ev.pointerId !== drag.id)) return;
+  const d = drag; drag = null;
+  view.classList.remove("panning");
+  try { view.releasePointerCapture(d.id); } catch (e) { /* already released */ }
+  if (!d.moved) {
+    if (d.line != null && ev && ev.type === "pointerup") { const l = net.lines.find(x => String(x.id) === d.line); if (l) openLine(l); }
+    return;
+  }
+  if (d.station != null && d.at) {
+    const gx = Math.max(0, Math.min(lay.cols - 1, Math.round((d.at[0] - dl.off[0] - MARGIN) / CELL)));
+    const gy = Math.max(0, Math.min(lay.rows - 1, Math.round((d.at[1] - dl.off[1] - HEAD - MARGIN * 0.7) / CELL)));
+    if (!lay.nodes.some(n => n.id !== d.station && n.gx === gx && n.gy === gy)) {
+      for (const n of lay.nodes) if (!pins.has(n.id)) pins.set(n.id, [n.gx, n.gy]);   // freeze the rest so only this stop moves
+      pins.set(d.station, [gx, gy]);
+    }
+    redraw(false);
+  }
+}
+window.addEventListener("pointermove", dragMove);
+window.addEventListener("pointerup", dragEnd);
+window.addEventListener("pointercancel", dragEnd);
+view.addEventListener("lostpointercapture", ev => { if (drag && drag.moved) dragEnd(ev); });
+view.addEventListener("dragstart", ev => ev.preventDefault());
+window.addEventListener("resize", () => { if (dl && !$("map").hidden) fit(); });
+
+/* ---------- saving ---------- */
+let sayTimer = null;
+const say = m => { const el = $("saveMsg"); el.textContent = m; el.hidden = !m; clearTimeout(sayTimer); if (m) sayTimer = setTimeout(() => { el.hidden = true; }, 3200); };
+const fileStem = () => (($("title").value.trim() || "route-map").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "route-map");
+// Inside Claude the page saves through the downloads capability; opened as a local file it uses a normal browser download.
+let downloads = null;
+const local = !(window.claude && window.claude.use);
+$("savePng").hidden = !local; $("saveSvg").hidden = !local;
+if (!local) window.claude.use("downloads").then(d => { downloads = d; if (d) { $("savePng").hidden = false; $("saveSvg").hidden = false; } });
+async function save(filename, data) {
+  if (local) {
+    const url = URL.createObjectURL(data instanceof Blob ? data : new Blob([data], { type: "image/svg+xml" }));
+    const a = document.createElement("a"); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    say("Saved " + filename);
+    return;
+  }
+  try { await downloads.save({ filename, data }); say("Saved " + filename); }
+  catch (e) { say(e && e.code === "declined" ? "Not saved" : "Saving does not work here"); }
+}
+$("saveSvg").addEventListener("click", () => save(fileStem() + ".svg", toSvgFile(dl)));
+$("savePng").addEventListener("click", () => {
+  const scale = Math.min(3, 6000 / Math.max(dl.w, dl.h));
+  toCanvas(dl, scale).toBlob(b => b ? save(fileStem() + ".png", b) : say("The PNG could not be drawn"), "image/png");
+});
+
+// remember the viewer's settings in this browser (not the map data itself)
+const KEEP = ["layoutMode", "title", "even", "dens", "thick", "labels", "fsize", "sheet", "colors", "badges", "water", "tight", "areas", "names", "netMode"];
+const STORE = "tf3-route-map-settings";
+try {
+  const saved = JSON.parse(localStorage.getItem(STORE) || "{}");
+  for (const id of KEEP) if (id in saved) { const el = $(id); if (el.type === "checkbox") el.checked = !!saved[id]; else el.value = saved[id]; }
+} catch (e) { /* storage unavailable: start from the defaults */ }
+const remember = () => {
+  try { const o = {}; for (const id of KEEP) { const el = $(id); o[id] = el.type === "checkbox" ? el.checked : el.value; } localStorage.setItem(STORE, JSON.stringify(o)); } catch (e) { /* not kept */ }
+};
+for (const id of KEEP) { $(id).addEventListener("change", remember); $(id).addEventListener("input", remember); }
+
+
+
+/* ---------- time machine ----------
+   Opening dates come from two places: when each station's construction was built (stored in the save, so it
+   reaches back to the very start), and the mod's history file, which records the exact moment lines appear
+   or disappear from the day the mod was installed. A line with no record opens when its last station was built. */
+let timeline = null, fullDl = null, tmT = null, tmPlaying = false, tmShownSig = "", tmCapTimer = null;
+/* opening dates set by hand on a line page, kept per save in this browser */
+const OPENED_KEY = "tf3-route-map-opened";
+const saveId = n => (n.history && n.history.key) ? String(n.history.key) : "default";
+let openedMem = null;
+function openedAll() {
+  if (openedMem) return openedMem;
+  try { openedMem = JSON.parse(localStorage.getItem(OPENED_KEY) || "{}") || {}; } catch (e) { openedMem = {}; }
+  return openedMem;
+}
+function openedFor(n) { const all = openedAll(); return all[saveId(n)] || {}; }
+function setOpened(n, id, t) {
+  const all = openedAll(), k = saveId(n), m = all[k] || {};
+  if (t == null) delete m[String(id)]; else m[String(id)] = t;
+  all[k] = m; openedMem = all;
+  try { localStorage.setItem(OPENED_KEY, JSON.stringify(all)); } catch (e) { /* kept for this visit only */ }
+}
+const OPEN_FROM = {
+  manual: "You set this date.",
+  history: "The mod saw it open.",
+  finance: "First money in or out for this line in the company accounts.",
+  log: "First entry in the game's statistics for this line.",
+  vehicle: "When its oldest vehicle was bought. Replacing vehicles moves this later.",
+  stations: "When its last station was built.",
+  guess: "The game has no date for this line, so it shows from when the mod first saw it."
+};
+function computeTimeline(n) {
+  const now = n.date != null ? n.date : (n.year ? n.year + 0.95 : null);
+  const hist = n.history && Array.isArray(n.history.entries)
+    ? n.history.entries.map(e => ({ t: dateNum(e.date), lines: new Set((e.lines || []).map(String)) })).filter(e => e.t != null).sort((a, b) => a.t - b.t) : [];
+  const events = [], lineOpen = new Map(), used = new Set(), manual = openedFor(n);
+  // things placed when the map was generated (industries, towns) predate the game: they count from its first day
+  const g0 = n.gameStart;
+  const built = st => st.built == null ? null : g0 != null ? Math.max(g0, st.built) : st.built;
+  const fallback = hist.length ? hist[0].t : now;
+  for (const l of n.lines) {
+    for (const id of l.seq) used.add(id);
+    const builts = l.seq.map(id => built(n.stations.get(id))).filter(t => t != null);
+    // street bus stops have no build date: their lines date from the oldest bus still running them
+    let t = builts.length ? Math.max(...builts) : null, exact = false, from = t == null ? null : "stations";
+    // newer exports work out the opening date in the game (ledger, line statistics, oldest vehicle)
+    const seen = l.opened != null ? l.opened : l.firstVehicle;
+    if (seen != null) { const v = Math.min(seen, now != null ? now : seen); if (t == null || v > t) { t = v; from = l.opened != null ? (l.openedFrom || "vehicle") : "vehicle"; } }
+    const idx = hist.findIndex(e => e.lines.has(String(l.id)));
+    if (idx > 0) { t = hist[idx].t; exact = true; from = "history"; }
+    else if (idx === 0 && t != null) t = Math.min(t, hist[0].t);
+    if (t == null) { t = fallback; from = "guess"; }   // no clue at all: show it from when the mod first saw it
+    l.autoOpen = t; l.autoFrom = from; l.autoExact = exact;
+    const mine = manual[String(l.id)];
+    if (typeof mine === "number") { t = mine; exact = true; from = "manual"; }
+    l.openFrom = from;
+    lineOpen.set(l, t);
+    if (t != null) events.push({ t, kind: "line", l, exact });
+  }
+  for (const id of used) { const st = n.stations.get(id), b = built(st); if (b != null) events.push({ t: b, kind: "station", st, exact: st.built >= (g0 == null ? -Infinity : g0) }); }
+  if (hist.length) {
+    const current = new Set(n.lines.map(l => String(l.id))), names = (n.history && n.history.names) || {}, lastSeen = new Map();
+    hist.forEach((e, i) => e.lines.forEach(id => lastSeen.set(id, i)));
+    for (const [id, i] of lastSeen) if (!current.has(id)) {
+      const t = hist[i + 1] ? hist[i + 1].t : now;
+      if (t != null) events.push({ t, kind: "closed", name: (names[id] && names[id].name) || "Line " + id, carrier: names[id] && names[id].carrier, exact: true });
+    }
+  }
+  const ts = events.map(e => e.t);
+  if (!ts.length) return null;
+  const end = now != null ? Math.max(now, ...ts) : Math.max(...ts);
+  const start = g0 != null ? Math.min(g0, ...ts) : Math.floor(Math.min(...ts));
+  if (end - start < 0.05) return null;
+  events.sort((a, b) => a.t - b.t || (a.kind === "station" ? -1 : 1));
+  return { start, end, events, lineOpen };
+}
+const visibleAt = t => new Set(lay.lines.filter(l => { const o = timeline.lineOpen.get(l); return o == null || o <= t + 1e-6; }));
+function viewLayout(full, vis) {
+  const nodeMap = new Map();
+  for (const n of full.nodes) {
+    const ls = new Set([...n.lines].filter(l => vis.has(l)));
+    if (ls.size) nodeMap.set(n.id, Object.assign({}, n, { lines: ls }));
+  }
+  const blocks = [];
+  for (const b of full.blocks) {
+    const members = b.members.map(m => nodeMap.get(m.id)).filter(Boolean);
+    if (!members.length) continue;
+    const nb = Object.assign({}, b, { members }); members.forEach(m => m.block = nb); blocks.push(nb);
+  }
+  const edges = full.edges.map(e => Object.assign({}, e, { lines: e.lines.filter(l => vis.has(l)) })).filter(e => e.lines.length && nodeMap.has(e.a) && nodeMap.has(e.b));
+  return Object.assign({}, full, { nodes: [...nodeMap.values()], edges, lines: full.lines.filter(l => vis.has(l)), blocks });
+}
+let prevVis = null;
+function drawAt(t, animate) {
+  const vis = visibleAt(t), sig = [...vis].map(l => l.id).join(",");
+  if (sig === tmShownSig) return;
+  const atEnd = t >= timeline.end - 1e-6 && vis.size === lay.lines.length;
+  if (atEnd) { dl = fullDl; }
+  else {
+    const fresh = { lines: new Set(), stations: new Set() };
+    if (animate && prevVis) {
+      for (const l of vis) if (!prevVis.has(l)) { fresh.lines.add(l); for (const id of l.seq) fresh.stations.add(id); }
+      for (const l of prevVis) if (vis.has(l)) for (const id of l.seq) fresh.stations.delete(id);
+    }
+    dl = build(net, viewLayout(lay, vis), Object.assign({}, opts(), { fixed: fullDl.fixed, warpNodes: lay.nodes, yearLabel: dateText(t, true), fresh }));
+  }
+  view.innerHTML = toSvgInner(dl); applyVb();
+  prevVis = vis; tmShownSig = sig;
+}
+function tmLabel() {
+  const t = tmT == null ? (timeline ? timeline.end : null) : tmT;
+  $("tmYear").textContent = t != null ? dateText(t) : (net.year || "");
+  $("tmMonth").textContent = !timeline ? "No dates in this file" : (tmT == null || tmT >= timeline.end - 1e-6) ? "Today" : MONTHS[Math.min(11, Math.floor((t - Math.floor(t)) * 12))];
+  if (timeline) $("tmRange").value = ((t - timeline.start) / (timeline.end - timeline.start)).toFixed(4);
+  $("tmIcon").setAttribute("d", tmPlaying ? "M6 4 H10 V20 H6 Z M14 4 H18 V20 H14 Z" : "M7 4 L20 12 L7 20 Z");
+  $("tmPlay").setAttribute("aria-label", tmPlaying ? "Pause" : "Play the history");
+}
+function eventHtml(e) {
+  if (e.kind === "line") return `${badgeHtml(e.l)}<span>${esc(routeOf(e.l))} opens</span>`;
+  if (e.kind === "station") return `<span class="dot" style="border-color:currentColor;margin:0 4px"></span><span>${esc(e.st.name)} opens</span>`;
+  return `<span class="closed">${esc(e.name)}</span><span>closes</span>`;
+}
+function showCaption(evs) {
+  if (!evs.length) return;
+  const lines = evs.filter(e => e.kind !== "station");
+  const pick = (lines.length ? lines : evs).slice(-3);
+  $("tmCap").innerHTML = `<div class="when">${esc(dateText(pick[pick.length - 1].t, true))}</div>` + pick.map(e => `<div class="ev">${eventHtml(e)}</div>`).join("");
+  $("tmCap").hidden = false;
+  clearTimeout(tmCapTimer); tmCapTimer = setTimeout(() => { $("tmCap").hidden = true; }, 3800);
+}
+function renderTimelineUi() {
+  $("tm").classList.toggle("off", !timeline);
+  if (!timeline) { $("tmTicks").innerHTML = ""; $("tmStart").textContent = ""; $("tmEnd").textContent = ""; tmLabel(); return; }
+  const span = timeline.end - timeline.start;
+  $("tmTicks").innerHTML = timeline.events.map(e => {
+    const left = (100 * (e.t - timeline.start) / span).toFixed(2);
+    if (e.kind === "station") return `<i class="st" style="left:${left}%"></i>`;
+    if (e.kind === "closed") return `<i class="cl" style="left:${left}%" title="${esc(e.name)} closes"></i>`;
+    return `<i class="ln" style="left:${left}%;background:${e.l.color}" title="${esc(e.l.badge + " " + routeOf(e.l))}"></i>`;
+  }).join("");
+  $("tmStart").textContent = dateText(timeline.start); $("tmEnd").textContent = dateText(timeline.end);
+  tmLabel();
+}
+function tmGoto(t, animate) {
+  tmT = Math.max(timeline.start, Math.min(timeline.end, t));
+  if (tmT >= timeline.end - 1e-6) tmT = null;
+  drawAt(tmT == null ? timeline.end : tmT, animate); tmLabel();
+}
+let lastFrame = 0;
+function tmStep(ts) {
+  if (!tmPlaying) return;
+  const dt = lastFrame ? Math.min(0.1, (ts - lastFrame) / 1000) : 0; lastFrame = ts;
+  const before = tmT, speed = +$("tmSpeed").value;
+  tmT = Math.min(timeline.end, tmT + dt * speed);
+  const crossed = timeline.events.filter(e => e.t > before && e.t <= tmT);
+  if (crossed.length) showCaption(crossed);
+  drawAt(tmT, true); tmLabel();
+  if (tmT >= timeline.end - 1e-6) { tmPlaying = false; tmT = null; drawAt(timeline.end, false); tmLabel(); return; }
+  requestAnimationFrame(tmStep);
+}
+function tmPlay() {
+  if (!timeline) return;
+  if (tmPlaying) { tmPlaying = false; tmLabel(); return; }
+  if (tmT == null || tmT >= timeline.end - 1e-6) { tmT = timeline.start; prevVis = null; tmShownSig = ""; drawAt(tmT, false); }
+  tmPlaying = true; lastFrame = 0; tmLabel(); requestAnimationFrame(tmStep);
+}
+$("tmPlay").addEventListener("click", tmPlay);
+$("tmNow").addEventListener("click", () => { tmPlaying = false; if (timeline) tmGoto(timeline.end, false); });
+$("tmRange").addEventListener("input", () => {
+  if (!timeline) return;
+  tmPlaying = false;
+  const before = tmT == null ? timeline.end : tmT;
+  tmGoto(timeline.start + (+$("tmRange").value) * (timeline.end - timeline.start), false);
+  const now = tmT == null ? timeline.end : tmT;
+  // going forward shows what opened; going back just shows the older map
+  if (now > before) showCaption(timeline.events.filter(e => e.t > before && e.t <= now));
+  else { clearTimeout(tmCapTimer); $("tmCap").hidden = true; }
+});
+
+/* ---------- remembered export file ----------
+   Where the browser allows it (Chrome or Edge opening the local file), the picker remembers export.lua:
+   the next visit loads it straight away, and the map refreshes by itself whenever the game writes a new export.
+   Elsewhere the normal file picker is used. */
+const IDB = { db: null };
+function idb() {
+  return new Promise((res, rej) => {
+    if (IDB.db) return res(IDB.db);
+    const r = indexedDB.open("tf3-route-map", 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("files");
+    r.onsuccess = () => { IDB.db = r.result; res(IDB.db); };
+    r.onerror = () => rej(r.error);
+  });
+}
+async function idbGet(k) { const db = await idb(); return new Promise((res, rej) => { const q = db.transaction("files").objectStore("files").get(k); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); }
+async function idbSet(k, v) { const db = await idb(); return new Promise((res, rej) => { const t = db.transaction("files", "readwrite"); t.objectStore("files").put(v, k); t.oncomplete = res; t.onerror = () => rej(t.error); }); }
+
+let exportHandle = null, lastStamp = 0, watchTimer = null;
+async function readHandle(handle, quiet) {
+  const f = await handle.getFile();
+  if (f.lastModified === lastStamp) return;
+  lastStamp = f.lastModified;
+  load(await f.text(), f.name + (quiet ? " (updated " + new Date(f.lastModified).toLocaleTimeString() + ")" : ""));
+}
+function watch(handle) {
+  exportHandle = handle; $("liveBtn").hidden = true; $("lamp").hidden = false;
+  clearInterval(watchTimer);
+  // the game rewrites export.lua when you press Map, so check it every few seconds
+  watchTimer = setInterval(() => { readHandle(handle, true).catch(() => { clearInterval(watchTimer); $("liveBtn").hidden = false; $("lamp").hidden = true; }); }, 3000);
+}
+async function pickExport() {
+  if (window.showOpenFilePicker) {
+    try {
+      const [handle] = await window.showOpenFilePicker({
+        id: "tf3-export", startIn: exportHandle || "documents",
+        types: [{ description: "Route map export", accept: { "text/plain": [".lua", ".txt", ".log", ".json"] } }],
+      });
+      lastStamp = 0; await readHandle(handle, false);
+      try { await idbSet("export", handle); } catch (e) { /* only kept for this visit */ }
+      watch(handle);
+      return;
+    } catch (e) {
+      if (e && e.name === "AbortError") return;   // picker closed
+      // not allowed here (for example inside Claude): fall through to the normal picker
+    }
+  }
+  $("file").click();
+}
+$("loadBtn").addEventListener("click", pickExport);
+$("liveBtn").addEventListener("click", async () => {
+  try {
+    if (exportHandle && (await exportHandle.requestPermission({ mode: "read" })) === "granted") { lastStamp = 0; await readHandle(exportHandle, false); watch(exportHandle); }
+  } catch (e) { setStatus("The browser would not reopen export.lua. Pick it again with the sign above.", true); }
+});
+(async () => {
+  try {
+    const h = await idbGet("export");
+    if (!h || !h.queryPermission) return;
+    exportHandle = h;
+    if ((await h.queryPermission({ mode: "read" })) === "granted") { await readHandle(h, false); watch(h); }
+    else $("liveBtn").hidden = false;   // the browser wants one click before reading it again
+  } catch (e) { /* nothing remembered */ }
+})();
+
+setStatus("");
+// text widths are measured for label placement, so redraw once the web font is in
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (net) redraw(true); });
+})();
+</script>
+
+</body>
+</html>
