@@ -162,6 +162,8 @@ button:hover, .btn:hover { border-color: var(--on-navy); }
 .lp-open-top b { font-family: var(--head); font-weight: 800; font-size: 21px; }
 .lp-open p { font-size: 13px; color: var(--soft); margin: 2px 0 10px; }
 .lp-open-edit { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto; gap: 6px; }
+.lp-id-edit { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+.lp-id-edit input { font-family: var(--head); font-weight: 800; letter-spacing: .04em; }
 .lp-open-reset { margin-top: 8px; border: 0 !important; background: none !important; padding: 0; font-size: 13px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
 .row { display: flex; flex-wrap: wrap; gap: 8px; }
 
@@ -293,6 +295,15 @@ input[type="range"] { width: 100%; accent-color: var(--navy); }
     <div class="lp-body">
       <div class="lp-side">
         <dl class="lp-facts" id="lpFacts"></dl>
+        <div class="lp-open lp-id" id="lpId">
+          <div class="lp-open-top"><span>Route ID</span><b id="lpIdNow"></b></div>
+          <p id="lpIdFrom"></p>
+          <div class="lp-id-edit">
+            <input id="lpIdInput" type="text" maxlength="6" autocomplete="off" spellcheck="false" aria-label="Route ID shown on the map">
+            <button id="lpIdSave" type="button" class="go">Set</button>
+          </div>
+          <button id="lpIdReset" type="button" class="lp-open-reset" hidden>Use the automatic one</button>
+        </div>
         <div class="lp-open" id="lpOpen" hidden>
           <div class="lp-open-top"><span>Opened</span><b id="lpOpenDate"></b></div>
           <p id="lpOpenFrom"></p>
@@ -443,10 +454,12 @@ function applyColors(net, mode) {
 }
 const BADGE_LETTER = { RAIL: "R", TRAM: "T", ROAD: "B", WATER: "F", AIR: "A", OTHER: "X" };
 function assignBadges(net) {
-  const count = {};
+  const count = {}, custom = badgesFor(net);
   [...net.lines].sort((a, b) => CARRIER_RANK[a.carrier] - CARRIER_RANK[b.carrier] || a.order - b.order).forEach(l => {
     count[l.carrier] = (count[l.carrier] || 0) + 1;
-    l.badge = BADGE_LETTER[l.carrier] + count[l.carrier];
+    l.autoBadge = BADGE_LETTER[l.carrier] + count[l.carrier];
+    const own = custom[String(l.id)];
+    l.badge = typeof own === "string" && own.trim() ? own.trim() : l.autoBadge;
   });
 }
 const inkOn = hex => { const [r, g, b] = hexRgb(hex); return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.62 ? "#14202b" : "#ffffff"; };
@@ -1194,6 +1207,7 @@ function openLine(l) {
   facts.push(["Towns", towns.length]);
   if (l.cargoTypes && l.cargoTypes.length) facts.push(["Carries", l.cargoTypes.join(", ")]);
   $("lpFacts").innerHTML = facts.map(x => `<div><dt>${x[0]}</dt><dd>${esc(x[1])}</dd></div>`).join("");
+  renderBadge(l);
   renderOpened(l);
   $("lpNote").hidden = l.vehicles != null;
   // stop list, in running order
@@ -1206,6 +1220,24 @@ function openLine(l) {
   $("linePage").hidden = false; document.body.style.overflow = "hidden";
   $("linePage").scrollTop = 0; $("lpClose").focus({ preventScroll: true });
 }
+function renderBadge(l) {
+  const own = l.badge !== l.autoBadge;
+  $("lpIdNow").textContent = l.badge;
+  $("lpIdFrom").textContent = own ? "You set this. The automatic one is " + l.autoBadge + "." : "Numbered by type and age. Type your own, like 12 or IC3.";
+  $("lpIdInput").value = l.badge;
+  $("lpIdReset").hidden = !own;
+  $("lpId").classList.toggle("set", own);
+}
+function saveBadge(v) {
+  const l = pageLine; if (!l) return;
+  const clean = (v || "").trim().replace(/\s+/g, " ").slice(0, 6);
+  setBadge(net, l.id, clean && clean !== l.autoBadge ? clean : null);
+  assignBadges(net);
+  redraw(false); openLine(l);
+}
+$("lpIdSave").addEventListener("click", () => saveBadge($("lpIdInput").value));
+$("lpIdInput").addEventListener("keydown", e => { if (e.key === "Enter") saveBadge($("lpIdInput").value); });
+$("lpIdReset").addEventListener("click", () => saveBadge(null));
 function renderOpened(l) {
   const box = $("lpOpen"), op = timeline && timeline.lineOpen.get(l);
   if (op == null) { box.hidden = true; return; }
@@ -1462,6 +1494,21 @@ for (const id of KEEP) { $(id).addEventListener("change", remember); $(id).addEv
 let timeline = null, fullDl = null, tmT = null, tmPlaying = false, tmShownSig = "", tmCapTimer = null;
 /* opening dates set by hand on a line page, kept per save in this browser */
 const OPENED_KEY = "tf3-route-map-opened";
+/* route IDs typed on a line page (B1 becomes 12, say), kept per save in this browser */
+const BADGE_KEY = "tf3-route-map-badges";
+let badgeMem = null;
+function badgesAll() {
+  if (badgeMem) return badgeMem;
+  try { badgeMem = JSON.parse(localStorage.getItem(BADGE_KEY) || "{}") || {}; } catch (e) { badgeMem = {}; }
+  return badgeMem;
+}
+function badgesFor(n) { const all = badgesAll(); return all[saveId(n)] || {}; }
+function setBadge(n, id, v) {
+  const all = badgesAll(), k = saveId(n), m = all[k] || {};
+  if (!v) delete m[String(id)]; else m[String(id)] = v;
+  all[k] = m; badgeMem = all;
+  try { localStorage.setItem(BADGE_KEY, JSON.stringify(all)); } catch (e) { /* kept for this visit only */ }
+}
 const saveId = n => (n.history && n.history.key) ? String(n.history.key) : "default";
 let openedMem = null;
 function openedAll() {
