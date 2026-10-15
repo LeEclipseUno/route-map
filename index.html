@@ -257,6 +257,7 @@ input[type="range"] { width: 100%; accent-color: var(--navy); }
       <button id="loadBtn" type="button">Open file</button>
       <button id="savePng" type="button">Save PNG</button>
       <button id="saveSvg" type="button">Save SVG</button>
+      <button id="shareBtn" type="button">Share link</button>
       <button id="studioOpen" type="button" class="go">Settings</button>
     </div>
   </header>
@@ -363,6 +364,8 @@ input[type="range"] { width: 100%; accent-color: var(--navy); }
     <div class="field"><label for="fsize">Name size <output id="fsizeOut"></output></label><input type="range" id="fsize" min="9" max="18" value="12"></div>
     <div class="switches">
       <label class="switch"><span>Line badges</span><input type="checkbox" id="badges" checked></label>
+      <label class="switch"><span>Interchange pills</span><input type="checkbox" id="pills" checked></label>
+      <label class="switch"><span>Industries and depots</span><input type="checkbox" id="places" checked></label>
     </div>
   </section>
   <section data-tab="look" hidden>
@@ -496,8 +499,11 @@ function toNetwork(raw) {
       firstVehicle: dateNum(l.firstVehicle), opened: dateNum(l.opened), openedFrom: typeof l.openedFrom === "string" ? l.openedFrom : null,
       vehicles: typeof l.vehicles === "number" ? l.vehicles : null, maxFrequency: typeof l.maxFrequency === "number" ? l.maxFrequency : null, load: l.load || null });
   });
+  const places = [];
+  for (const it of (raw.industries || [])) if (it && Array.isArray(it.pos) && typeof it.pos[0] === "number") places.push({ id: it.id, kind: "industry", name: it.name || "Industry", x: it.pos[0], y: it.pos[1] });
+  for (const it of (raw.depots || [])) if (it && Array.isArray(it.pos) && typeof it.pos[0] === "number") places.push({ id: it.id, kind: "depot", name: it.name || "Depot", x: it.pos[0], y: it.pos[1], carrier: typeof it.carrier === "string" ? it.carrier : null });
   const missing = raw.stations.length - stations.size;
-  return { stations, towns, lines, water: readWater(raw.water), date: dateNum(raw.date), gameStart: dateNum(raw.gameStart), history: raw.history || null, raw, year: raw.year, sample: !!raw.sample, missing, diagnostics: raw.diagnostics || [] };
+  return { stations, towns, lines, places, water: readWater(raw.water), date: dateNum(raw.date), gameStart: dateNum(raw.gameStart), history: raw.history || null, raw, year: raw.year, sample: !!raw.sample, missing, diagnostics: raw.diagnostics || [] };
 }
 
 /* ---------- layout ---------- */
@@ -526,7 +532,15 @@ function layout(net, opt) {
     }
     l.ends = [];
     for (const [id, d] of deg) if (d === 1) { st.get(id).ends++; l.ends.push(id); }   // a there-and-back line has real ends, a loop has none
-    if (!l.ends.length) l.ends.push(l.seq[0]);
+    const loop = !l.ends.length;
+    if (loop) l.ends.push(l.seq[0]);
+    // which stops the line runs through, with the stop before and after: the layout tries to keep those straight
+    for (let i = 0; i < n; i++) {
+      if (!loop && (i === 0 || i === n - 1)) continue;
+      const a = l.seq[(i - 1 + n) % n], b = l.seq[(i + 1) % n], m = node(l.seq[i]);
+      if (a === b || a === m.id || b === m.id) continue;
+      (m.thru || (m.thru = [])).push([a, b]);
+    }
   }
   const nodes = [...st.values()];
   if (!nodes.length) return { nodes, edges: [], lines, cols: 6, rows: 4, blocks: [] };
@@ -659,6 +673,15 @@ function layout(net, opt) {
       if (Math.abs(ix) > 0.8 && Math.sign(ix) !== Math.sign(ddx)) c += 5;
       if (Math.abs(iy) > 0.8 && Math.sign(iy) !== Math.sign(ddy)) c += 5;
       c += 2.5 * Math.min(...bends([x, y], [m.gx, m.gy]).map(o => o.h));
+    }
+    // a line that pulls into this stop and straight back out again looks wrong; straight through is free,
+    // a gentle 45 degree turn nearly so, a right angle costs a little and a hairpin a lot
+    for (const [a, b] of (n.thru || [])) {
+      const A = st.get(a), B = st.get(b);
+      const ux = A.gx - x, uy = A.gy - y, vx = B.gx - x, vy = B.gy - y, lu = Math.hypot(ux, uy), lv = Math.hypot(vx, vy);
+      if (!lu || !lv) continue;
+      const cos = (ux * vx + uy * vy) / (lu * lv);
+      if (cos > -0.72) c += 2 + 6 * Math.max(0, cos);
     }
     return c;
   };
@@ -902,7 +925,30 @@ function build(net, lay, opt) {
     const only = [...n.lines][0];
     const r = inter ? Math.max(base * 0.95, half + base * 0.28) : Math.max(3.2, lw(only) * 0.62);
     n.px = x; n.py = y; n.r = r; n.key = inter || n.ends > 0;
-    marks.push({ t: "circle", x, y, r, fill: sh.stop, stroke: inter ? sh.ink : colOf(only), sw: inter ? Math.max(2, base * 0.34) : Math.max(1.6, lw(only) * 0.36), station: n.id });
+    const sw = inter ? Math.max(2, base * 0.34) : Math.max(1.6, lw(only) * 0.36);
+    // the classic interchange pill: when every connection leaves along one axis, the stop becomes a
+    // capsule lying across the bundle so each line visibly passes through it
+    let pill = null;
+    if (inter && opt.pills && !lay.geo) {
+      const dirs = [];
+      for (const ed of lay.edges) {
+        if (ed.a !== n.id && ed.b !== n.id) continue;
+        const g = ed.a === n.id ? ed.pts[1] : ed.pts[ed.pts.length - 2], o = ed.a === n.id ? ed.pts[0] : ed.pts[ed.pts.length - 1];
+        const dx = g[0] - o[0], dy = g[1] - o[1], L = Math.hypot(dx, dy) || 1; dirs.push([dx / L, dy / L]);
+      }
+      if (dirs.length && dirs.every(d => Math.abs(d[0] * dirs[0][1] - d[1] * dirs[0][0]) < 0.05)) {
+        const ax = dirs[0][0], ay = dirs[0][1], span = half + base * 0.1, thick = Math.max(base * 1.25, lw(only) * 1.6);
+        if (span > thick * 0.45) pill = { px: -ay, py: ax, span, thick };
+      }
+    }
+    if (pill) {
+      const a = [x + pill.px * pill.span, y + pill.py * pill.span], b = [x - pill.px * pill.span, y - pill.py * pill.span];
+      marks.push({ t: "path", d: [["M", a[0], a[1]], ["L", b[0], b[1]]], stroke: sh.ink, width: pill.thick + sw * 2, station: n.id });
+      marks.push({ t: "path", d: [["M", a[0], a[1]], ["L", b[0], b[1]]], stroke: sh.stop, width: pill.thick, station: n.id });
+      n.r = Math.max(r, pill.span + pill.thick / 2 + sw);
+      n.rx = Math.abs(pill.px) * (pill.span + sw) + Math.abs(pill.py) * (pill.thick / 2 + sw);
+      n.ry = Math.abs(pill.py) * (pill.span + sw) + Math.abs(pill.px) * (pill.thick / 2 + sw);
+    } else marks.push({ t: "circle", x, y, r, fill: sh.stop, stroke: inter ? sh.ink : colOf(only), sw, station: n.id });
   }
 
   // town areas; their names go on top of the lines, at whichever corner is clearest
@@ -963,6 +1009,46 @@ function build(net, lay, opt) {
         badges.push({ t: "text", x: cx, y: cy + bsize * 0.36, s: l.badge, size: bsize, weight: 800, fill: sh.mono ? "#ffffff" : inkOn(l.color), anchor: "middle", line: l });
         placed.push([cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2]);
       }
+    }
+  }
+
+  // industries and depots: a small sign next to the nearest stop that serves them
+  const signs = [];
+  if (opt.places && net.places && net.places.length && lay.nodes.length) {
+    const ssize = 10, box = 15;
+    for (const pl of net.places) {
+      let best = null, bd = Infinity;
+      for (const n of lay.nodes) {
+        const s = net.stations.get(n.id);
+        const ok = pl.kind === "industry" ? s.cargo : (!pl.carrier || [...n.lines].some(l => l.carrier === pl.carrier));
+        if (!ok) continue;
+        const d = Math.hypot(n.x - pl.x, n.y - pl.y);
+        if (d < bd) { bd = d; best = n; }
+      }
+      if (!best || bd > (pl.kind === "industry" ? 900 : 700)) continue;
+      const n = best, tw = textW(pl.name, ssize, 600), w = box + 5 + tw, h = box + 2;
+      // eight spots around the stop, the first clear one wins
+      let pick = null, ps = Infinity;
+      [[1, 1], [-1, 1], [1, -1], [-1, -1], [1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([ux, uy], i) => {
+        for (let ring = 0; ring < 3; ring++) {
+          const reach = n.r + 6 + ring * (h + 4), cx = n.px + ux * (reach + (ux ? w / 2 : 0)), cy = n.py + uy * (reach + h / 2);
+          const r = [cx - w / 2 - 2, cy - h / 2 - 2, cx + w / 2 + 2, cy + h / 2 + 2];
+          let sc = i * 2 + ring * 40;
+          for (const p of placed) if (r[0] < p[2] && r[2] > p[0] && r[1] < p[3] && r[3] > p[1]) sc += 300;
+          for (const m of lay.nodes) if (m.px > r[0] - m.r && m.px < r[2] + m.r && m.py > r[1] - m.r && m.py < r[3] + m.r) sc += 120;
+          for (const ob of obstacles) if (ob[0] > r[0] - ob[2] && ob[0] < r[2] + ob[2] && ob[1] > r[1] - ob[2] && ob[1] < r[3] + ob[2]) sc += 8;
+          if (sc < ps) { ps = sc; pick = [cx, cy, r]; }
+        }
+      });
+      const [cx, cy, r] = pick, x0 = cx - w / 2, y0 = cy - box / 2;
+      signs.push({ t: "rect", x: x0, y: y0, w: box, h: box, fill: sh.stop, stroke: sh.sub, sw: 1.3, rx: 3 });
+      if (pl.kind === "industry") {
+        // a little factory: roof line with two teeth and a chimney
+        const k = box / 15;
+        signs.push({ t: "path", d: [["M", x0 + 3 * k, y0 + 12 * k], ["L", x0 + 3 * k, y0 + 7 * k], ["L", x0 + 6 * k, y0 + 9 * k], ["L", x0 + 6 * k, y0 + 7 * k], ["L", x0 + 9 * k, y0 + 9 * k], ["L", x0 + 9 * k, y0 + 3 * k], ["L", x0 + 11 * k, y0 + 3 * k], ["L", x0 + 11 * k, y0 + 12 * k], ["L", x0 + 3 * k, y0 + 12 * k]], stroke: sh.ink, width: 1.4, butt: true });
+      } else signs.push({ t: "text", x: x0 + box / 2, y: y0 + box * 0.74, s: "D", size: 10, weight: 800, fill: sh.ink, anchor: "middle" });
+      signs.push({ t: "text", x: x0 + box + 5, y: cy + ssize * 0.36, s: pl.name, size: ssize, weight: 600, fill: sh.sub, anchor: "start", halo: sh.bg });
+      placed.push([r[0], r[1], r[2], r[3]]);
     }
   }
 
@@ -1059,7 +1145,7 @@ function build(net, lay, opt) {
       }
     }
   }
-  const mapItems = [...waterItems, ...areas, ...items, ...marks, ...badges, ...townLabels, ...labels];
+  const mapItems = [...waterItems, ...areas, ...items, ...marks, ...badges, ...signs, ...townLabels, ...labels];
   if (dx || dy) for (const it of mapItems) shiftItem(it, dx, dy);
   const mapBottom = crop[3];
 
@@ -1115,7 +1201,7 @@ function toSvgInner(dl) {
     if (it.t === "multipoly") return `<path d="${it.polys.map(pts => "M" + pts.map(p => f1(p[0]) + " " + f1(p[1])).join("L") + "Z").join("")}" ${it.fill ? `fill="${it.fill}" fill-rule="evenodd"` : `fill="none" stroke="${it.stroke}" stroke-width="${it.width}" stroke-linejoin="round"`}/>`;
     const dline = it.line ? ` data-line="${esc(String(it.line.id))}"` : "";
     if (it.t === "rect") return `<rect${dline}${it.fresh ? ` class="pop"` : ""} x="${f1(it.x)}" y="${f1(it.y)}" width="${f1(it.w)}" height="${f1(it.h)}" fill="${it.fill}"${it.fo != null ? ` fill-opacity="${it.fo}"` : ""}${it.stroke ? ` stroke="${it.stroke}" stroke-width="${f1(it.sw || 1)}"` : ""}${it.rx ? ` rx="${f1(it.rx)}"` : ""}/>`;
-    if (it.t === "path") return `<path${dline}${it.fresh && !it.dash ? ` class="drawin" pathLength="1"` : it.fresh ? ` class="fadein"` : ""} d="${it.d.map(c => c[0] + c.slice(1).map(f1).join(" ")).join("")}" fill="none" stroke="${it.stroke}" stroke-width="${f1(it.width)}" stroke-linecap="${it.butt || it.dash ? "butt" : "round"}" stroke-linejoin="round"${it.dash ? ` stroke-dasharray="${it.dash.map(f1).join(" ")}"` : ""}/>`;
+    if (it.t === "path") return `<path${dline}${it.station != null ? ` data-station="${it.station}"` : ""}${it.fresh && !it.dash && it.station == null ? ` class="drawin" pathLength="1"` : it.fresh ? ` class="fadein"` : ""} d="${it.d.map(c => c[0] + c.slice(1).map(f1).join(" ")).join("")}" fill="none" stroke="${it.stroke}" stroke-width="${f1(it.width)}" stroke-linecap="${it.butt || it.dash ? "butt" : "round"}" stroke-linejoin="round"${it.dash ? ` stroke-dasharray="${it.dash.map(f1).join(" ")}"` : ""}/>`;
     if (it.t === "circle") return `<circle${it.fresh ? ` class="pop"` : ""} cx="${f1(it.x)}" cy="${f1(it.y)}" r="${f1(it.r)}" fill="${it.fill}" stroke="${it.stroke}" stroke-width="${f1(it.sw)}"${it.station != null ? ` data-station="${it.station}"` : ""}/>`;
     return `<text${dline}${it.fresh ? ` class="fadein"` : ""} x="${f1(it.x)}" y="${f1(it.y)}" font-family='${FONT}' font-size="${it.size}" font-weight="${it.weight}" fill="${it.fill}" text-anchor="${it.anchor}"${it.ls ? ` letter-spacing="${it.ls}"` : ""}${it.halo ? ` stroke="${it.halo}" stroke-width="${f1(it.size * 0.3)}" stroke-linejoin="round" paint-order="stroke"` : ""}>${esc(it.s)}</text>`;
   }).join("");
@@ -1280,7 +1366,7 @@ function lineMapSvg(l) {
   let w = x1 - x0, h = y1 - y0;
   if (w / h > 4 / 3) { const nh = w * 3 / 4; y0 -= (nh - h) / 2; h = nh; } else { const nw = h * 4 / 3; x0 -= (nw - w) / 2; w = nw; }
   const ids = new Set(l.seq);
-  const mine = dl.items.filter(it => it.line === l || (it.t === "circle" && ids.has(it.station)));
+  const mine = dl.items.filter(it => it.line === l || ((it.t === "circle" || it.t === "path") && it.station != null && ids.has(it.station)));
   return `<svg viewBox="${f1(x0)} ${f1(y0)} ${f1(w)} ${f1(h)}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Map of this line"><g opacity="0.3">${toSvgInner(dl)}</g>${toSvgInner({ items: mine })}</svg>`;
 }
 function closeLine() { $("linePage").hidden = true; document.body.style.overflow = ""; pageLine = null; }
@@ -1301,7 +1387,7 @@ const view = $("view");
 const opts = () => ({
   carriers: new Set([...document.querySelectorAll("#carriers input:checked")].map(i => i.value)),
   even: +$("even").value / 100, density: +$("dens").value / 100, thick: +$("thick").value / 100,
-  title: $("title").value.trim(), geo: $("layoutMode").value === "geo", tight: $("tight").checked, badges: $("badges").checked, water: $("water").checked, areas: $("areas").checked, names: $("names").value, net: $("netMode").value, labels: $("labels").value, fsize: +$("fsize").value, sheet: $("sheet").value
+  title: $("title").value.trim(), geo: $("layoutMode").value === "geo", tight: $("tight").checked, badges: $("badges").checked, pills: $("pills").checked, places: $("places").checked, water: $("water").checked, areas: $("areas").checked, names: $("names").value, net: $("netMode").value, labels: $("labels").value, fsize: +$("fsize").value, sheet: $("sheet").value
 });
 function redraw(refit) {
   $("evenOut").textContent = $("even").value + "%"; $("densOut").textContent = $("dens").value + "%";
@@ -1395,7 +1481,7 @@ $("layoutMode").addEventListener("change", () => redraw(true));
 $("netMode").addEventListener("change", () => redraw(true));
 ["thick", "fsize", "title"].forEach(id => $(id).addEventListener("input", () => redraw(false)));
 $("colors").addEventListener("change", () => { applyColors(net, $("colors").value); buildFilters(); redraw(false); });
-["labels", "sheet", "areas", "names", "badges", "water", "tight"].forEach(id => $(id).addEventListener("change", () => redraw(false)));
+["labels", "sheet", "areas", "names", "badges", "pills", "places", "water", "tight"].forEach(id => $(id).addEventListener("change", () => redraw(false)));
 $("unpin").addEventListener("click", () => { pins.clear(); redraw(false); });
 $("fit").addEventListener("click", fit); $("zin").addEventListener("click", () => zoom(0.8)); $("zout").addEventListener("click", () => zoom(1.25));
 view.addEventListener("wheel", ev => { ev.preventDefault(); zoom(ev.deltaY > 0 ? 1.12 : 0.89, ev.clientX, ev.clientY); }, { passive: false });
@@ -1473,8 +1559,46 @@ $("savePng").addEventListener("click", () => {
   toCanvas(dl, scale).toBlob(b => b ? save(fileStem() + ".png", b) : say("The PNG could not be drawn"), "image/png");
 });
 
+/* ---------- share link: the whole map folded into the address, nothing stored anywhere ---------- */
+const b64u = {
+  enc: bytes => btoa(Array.from(bytes, b => String.fromCharCode(b)).join("")).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""),
+  dec: str => Uint8Array.from(atob(str.replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0)),
+};
+async function squeeze(text, mode) {
+  const cs = mode === "in" ? new CompressionStream("deflate-raw") : new DecompressionStream("deflate-raw");
+  const w = cs.writable.getWriter(); w.write(mode === "in" ? new TextEncoder().encode(text) : text); w.close();
+  const buf = await new Response(cs.readable).arrayBuffer();
+  return mode === "in" ? new Uint8Array(buf) : new TextDecoder().decode(buf);
+}
+async function shareLink() {
+  if (!net) return;
+  const o = {}; for (const id of KEEP) { const el = $(id); o[id] = el.type === "checkbox" ? el.checked : el.value; }
+  const pack = { v: 1, raw: net.raw, o, b: badgesFor(net), d: openedFor(net) };
+  try {
+    const bytes = await squeeze(JSON.stringify(pack), "in");
+    const url = location.origin + location.pathname + "#s=" + b64u.enc(bytes), kb = Math.round(url.length / 1024);
+    try { await navigator.clipboard.writeText(url); } catch (e) { prompt("Copy this link", url); }
+    say(kb > 150 ? `Link copied, ${kb} KB. Long links can get cut by some chat apps.` : `Link copied (${kb} KB)`);
+  } catch (e) { say("This browser cannot make the link"); }
+}
+$("shareBtn").addEventListener("click", shareLink);
+async function openShared() {
+  const m = /#s=([A-Za-z0-9_-]+)/.exec(location.hash);
+  if (!m) return false;
+  try {
+    const pack = JSON.parse(await squeeze(b64u.dec(m[1]), "out"));
+    if (!pack || !pack.raw) throw new Error("empty");
+    if (pack.o) for (const id of KEEP) if (id in pack.o) { const el = $(id); if (el.type === "checkbox") el.checked = !!pack.o[id]; else el.value = pack.o[id]; }
+    const n = toNetwork(pack.raw), k = saveId(n);
+    if (pack.b) { const all = badgesAll(); all[k] = Object.assign(all[k] || {}, pack.b); badgeMem = all; }
+    if (pack.d) { const all = openedAll(); all[k] = Object.assign(all[k] || {}, pack.d); openedMem = all; }
+    load(JSON.stringify(pack.raw), "shared link");
+    return true;
+  } catch (e) { setStatus("That link does not hold a map, or it was cut off.", true); return false; }
+}
+
 // remember the viewer's settings in this browser (not the map data itself)
-const KEEP = ["layoutMode", "title", "even", "dens", "thick", "labels", "fsize", "sheet", "colors", "badges", "water", "tight", "areas", "names", "netMode"];
+const KEEP = ["layoutMode", "title", "even", "dens", "thick", "labels", "fsize", "sheet", "colors", "badges", "pills", "places", "water", "tight", "areas", "names", "netMode"];
 const STORE = "tf3-route-map-settings";
 try {
   const saved = JSON.parse(localStorage.getItem(STORE) || "{}");
@@ -1735,6 +1859,7 @@ $("liveBtn").addEventListener("click", async () => {
   } catch (e) { setStatus("The browser would not reopen export.lua. Pick it again with the sign above.", true); }
 });
 (async () => {
+  if (/#s=/.test(location.hash)) return;   // a shared link wins over the remembered file
   try {
     const h = await idbGet("export");
     if (!h || !h.queryPermission) return;
@@ -1745,6 +1870,7 @@ $("liveBtn").addEventListener("click", async () => {
 })();
 
 setStatus("");
+openShared();
 // text widths are measured for label placement, so redraw once the web font is in
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (net) redraw(true); });
 })();
