@@ -198,7 +198,20 @@ input[type="range"] { width: 100%; accent-color: var(--navy); }
 .switch input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: var(--soft); transition: transform .15s, background .15s; }
 .switch input:checked { background: var(--navy); border-color: var(--navy); }
 .switch input:checked::after { transform: translateX(18px); background: var(--on-navy); }
-.lines { display: grid; gap: 2px; max-height: 300px; overflow-y: auto; background: var(--card-3); border-radius: 12px; padding: 8px; }
+.lines-box { background: var(--card-3); border-radius: 12px; padding: 8px; }
+.lfind { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 6px; padding: 2px 6px 8px; border-bottom: 1px solid var(--rule); margin-bottom: 6px; }
+.lfind svg { width: 14px; height: 14px; fill: none; stroke: var(--soft); stroke-width: 1.8; stroke-linecap: round; }
+.lfind input { background: none; border: 0; padding: 4px 0 2px; font-size: 13px; font-weight: 600; width: 100%; color: var(--ink); min-width: 0; }
+.lfind input:focus { outline: none; }
+.lfind input::placeholder { color: var(--soft); font-weight: 600; }
+.lfind input::-webkit-search-cancel-button { display: none; }
+.lfind button { border: 0 !important; background: none !important; padding: 0 4px; font-size: 18px; line-height: 1; color: var(--soft); cursor: pointer; }
+.lfind button:hover { color: var(--ink); }
+.lfind span { font-size: 11px; color: var(--soft); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lfind span:empty { display: none; }
+.lnone { margin: 4px 4px 2px; font-size: 13px; color: var(--soft); }
+.lines { display: grid; gap: 2px; max-height: 300px; overflow-y: auto; }
+.lines label.off { display: none; }
 .lines label { display: grid; grid-template-columns: auto 22px minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 13px; font-weight: 600; cursor: pointer; padding: 3px 4px; border-radius: 6px; }
 .lines label:hover { background: var(--card-2); }
 .lines .sw { height: 6px; border-radius: 3px; }
@@ -340,7 +353,16 @@ input[type="range"] { width: 100%; accent-color: var(--navy); }
     <div class="field"><span class="lab">Kinds</span><div class="chips" id="carriers"></div></div>
     <div class="field">
       <span class="lab">Lines <span><button type="button" id="allOn" class="mini">All</button> <button type="button" id="allOff" class="mini">None</button></span></span>
-      <div class="lines" id="lines"></div>
+      <div class="lines-box">
+        <div class="lfind">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="6.8" cy="6.8" r="4.6"/><path d="M10.3 10.3 14 14"/></svg>
+          <input type="search" id="lineFind" placeholder="Find a line" autocomplete="off" spellcheck="false" aria-label="Find a line">
+          <button type="button" id="lineFindClear" aria-label="Clear" hidden>&times;</button>
+          <span id="lineFindCount"></span>
+        </div>
+        <div class="lines" id="lines"></div>
+        <p class="lnone" id="lineNone" hidden>Nothing matches.</p>
+      </div>
     </div>
   </section>
   <section data-tab="layout" hidden>
@@ -1153,7 +1175,8 @@ function build(net, lay, opt) {
   const legend = [], lsize = 13, rowH = 23;
   let ly = mapBottom + MARGIN * 0.55;
   legend.push({ t: "path", d: [["M", MARGIN - 20, ly - 26], ["L", W - MARGIN + 20, ly - 26]], stroke: sh.rule, width: 1.5, butt: true });
-  const colW = Math.min(W - MARGIN * 2 + 40, Math.max(170, ...lay.lines.map(l => textW(l.name, lsize, 600) + 74 + (opt.badges ? 44 : 0))));
+  const legendText = l => l.name + (l.cargoTypes && l.cargoTypes.length ? "  ·  " + l.cargoTypes.join(", ") : "");
+  const colW = Math.min(W - MARGIN * 2 + 40, Math.max(170, ...lay.lines.map(l => textW(legendText(l), lsize, 600) + 74 + (opt.badges ? Math.max(26, textW(l.badge, 11, 800) + 12) + 8 : 0))));
   const ncol = Math.max(1, Math.floor((W - MARGIN * 2 + 40) / colW));
   for (const [code, label] of CARRIERS) {
     const group = lay.lines.filter(l => l.carrier === code);
@@ -1170,7 +1193,7 @@ function build(net, lay, opt) {
         legend.push({ t: "text", x: tx + bw / 2, y: cy - 0.5, s: l.badge, size: 11, weight: 800, fill: sh.mono ? "#ffffff" : inkOn(l.color), anchor: "middle" });
         tx += bw + 8;
       }
-      legend.push({ t: "text", x: tx, y: cy, s: l.name + (l.cargoTypes && l.cargoTypes.length ? "  ·  " + l.cargoTypes.join(", ") : ""), size: lsize, weight: 600, fill: sh.ink, anchor: "start" });
+      legend.push({ t: "text", x: tx, y: cy, s: legendText(l), size: lsize, weight: 600, fill: sh.ink, anchor: "start" });
     });
     ly += Math.ceil(group.length / ncol) * rowH + 14;
   }
@@ -1422,6 +1445,7 @@ function buildFilters() {
   const present = new Set(net.lines.map(l => l.carrier));
   $("carriers").innerHTML = CARRIERS.filter(c => present.has(c[0])).map(c => `<label class="chip"><input type="checkbox" id="car-${c[0]}" value="${c[0]}" checked>${c[1]}</label>`).join("");
   $("lines").innerHTML = net.lines.map((l, i) => `<label><input type="checkbox" id="line-${i}" data-i="${i}" ${l.on ? "checked" : ""}><span class="sw" style="background:${l.color}"></span><span class="nm" title="${esc(l.name)}">${esc(l.name)}</span><span class="ct">${l.seq.length}</span></label>`).join("") || "<span>No lines in this file.</span>";
+  if (typeof filterLines === "function") filterLines();
 }
 function setStatus(msg, bad) { const s = $("status"); s.textContent = msg; s.classList.toggle("bad", !!bad); }
 function load(text, label) {
@@ -1474,7 +1498,19 @@ $("tabs").addEventListener("click", ev => { const b = ev.target.closest("[data-t
 try { showTab(localStorage.getItem(TAB_KEY) || "lines"); } catch (e) { showTab("lines"); }
 $("carriers").addEventListener("change", () => redraw(true));
 $("lines").addEventListener("change", ev => { const i = ev.target.dataset.i; if (i != null) { net.lines[+i].on = ev.target.checked; redraw(true); } });
-const setAll = v => { net.lines.forEach(l => l.on = v); buildFilters(); redraw(true); };
+const setAll = v => { const q = lineQuery(); net.lines.forEach(l => { if (!q || lineHit(l, q)) l.on = v; }); buildFilters(); redraw(true); };
+const lineQuery = () => $("lineFind").value.trim().toLowerCase();
+const lineHit = (l, q) => (l.name + " " + l.badge + " " + (l.cargoTypes || []).join(" ")).toLowerCase().includes(q);
+function filterLines() {
+  const q = lineQuery(); let shown = 0;
+  net.lines.forEach((l, i) => { const el = $("line-" + i); if (!el) return; const hit = !q || lineHit(l, q); el.closest("label").classList.toggle("off", !hit); if (hit) shown++; });
+  $("lineFindClear").hidden = !q;
+  $("lineFindCount").textContent = q ? shown + " of " + net.lines.length : "";
+  $("lineNone").hidden = !q || shown > 0;
+}
+$("lineFind").addEventListener("input", filterLines);
+$("lineFind").addEventListener("keydown", ev => { if (ev.key === "Escape") { $("lineFind").value = ""; filterLines(); } });
+$("lineFindClear").addEventListener("click", () => { $("lineFind").value = ""; filterLines(); $("lineFind").focus(); });
 $("allOn").addEventListener("click", () => setAll(true)); $("allOff").addEventListener("click", () => setAll(false));
 ["even", "dens"].forEach(id => $(id).addEventListener("input", () => { pins.clear(); redraw(true); }));
 $("layoutMode").addEventListener("change", () => redraw(true));
