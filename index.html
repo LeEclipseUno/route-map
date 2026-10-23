@@ -378,7 +378,7 @@ input[type="range"] { width: 100%; accent-color: var(--navy); }
     <div class="row"><button id="unpin" type="button">Put moved stops back</button></div>
   </section>
   <section data-tab="labels" hidden>
-    <div class="field"><label for="title">Map title</label><input type="text" id="title" value="Network Map" maxlength="60"></div>
+    <div class="field"><label for="title">Map title</label><input type="text" id="title" value="" placeholder="Your company name" maxlength="60"></div>
     <div class="field"><label for="labels">Stop names</label>
       <select id="labels"><option value="all">Every stop</option><option value="key">Interchanges and ends only</option><option value="none">None</option></select></div>
     <div class="field"><label for="names">Station names</label>
@@ -387,6 +387,7 @@ input[type="range"] { width: 100%; accent-color: var(--navy); }
     <div class="switches">
       <label class="switch"><span>Line badges</span><input type="checkbox" id="badges" checked></label>
       <label class="switch"><span>Interchange pills</span><input type="checkbox" id="pills" checked></label>
+      <label class="switch"><span>Express beside local</span><input type="checkbox" id="express" checked></label>
       <label class="switch"><span>Industries and depots</span><input type="checkbox" id="places" checked></label>
     </div>
   </section>
@@ -525,7 +526,8 @@ function toNetwork(raw) {
   for (const it of (raw.industries || [])) if (it && Array.isArray(it.pos) && typeof it.pos[0] === "number") places.push({ id: it.id, kind: "industry", name: it.name || "Industry", x: it.pos[0], y: it.pos[1] });
   for (const it of (raw.depots || [])) if (it && Array.isArray(it.pos) && typeof it.pos[0] === "number") places.push({ id: it.id, kind: "depot", name: it.name || "Depot", x: it.pos[0], y: it.pos[1], carrier: typeof it.carrier === "string" ? it.carrier : null });
   const missing = raw.stations.length - stations.size;
-  return { stations, towns, lines, places, water: readWater(raw.water), date: dateNum(raw.date), gameStart: dateNum(raw.gameStart), history: raw.history || null, raw, year: raw.year, sample: !!raw.sample, missing, diagnostics: raw.diagnostics || [] };
+  const company = typeof raw.company === "string" && raw.company.trim() ? raw.company.trim() : null;
+  return { stations, towns, lines, places, company, water: readWater(raw.water), date: dateNum(raw.date), gameStart: dateNum(raw.gameStart), history: raw.history || null, raw, year: raw.year, sample: !!raw.sample, missing, diagnostics: raw.diagnostics || [] };
 }
 
 /* ---------- layout ---------- */
@@ -538,12 +540,54 @@ function layout(net, opt) {
   const lines = net.lines.filter(l => l.on && opt.carriers.has(l.carrier) && l.seq.length >= 2 && (opt.net === "all" || (opt.net === "freight") === !!l.cargo));
   const st = new Map(), edges = new Map();
   const node = id => { let n = st.get(id); if (!n) { const s = net.stations.get(id); n = { id, name: s.name, town: s.town, x: s.x, y: s.y, lines: new Set(), nbrs: new Set(), ends: 0 }; st.set(id, n); } return n; };
+  // Express and local: when a line skips stops that another line of the same kind serves in between,
+  // it follows that line through them instead of cutting straight across, so both run side by side.
+  // The skipped stops are remembered so the drawing can show the express passing without stopping.
+  const via = (l, a, b) => {
+    const A = net.stations.get(a), B = net.stations.get(b);
+    const dx = B.x - A.x, dy = B.y - A.y, L2 = dx * dx + dy * dy, L = Math.sqrt(L2);
+    if (!(L > 0)) return null;
+    let best = null;
+    for (const m of lines) {
+      if (m === l || m.carrier !== l.carrier) continue;
+      const q = m.seq, k = q.length;
+      for (let i = 0; i < k; i++) {
+        if (q[i] !== a) continue;
+        for (const dir of [1, -1]) {
+          const mid = [];
+          let ok = false, last = 0;
+          for (let step = 1; step <= 10; step++) {
+            const id = q[((i + dir * step) % k + k) % k];
+            if (id === b) { ok = mid.length > 0; break; }
+            if (id === a) break;
+            const S = net.stations.get(id);
+            const t = ((S.x - A.x) * dx + (S.y - A.y) * dy) / L2;
+            const off = Math.abs((S.x - A.x) * dy - (S.y - A.y) * dx) / L;
+            if (t <= last || t >= 1 || off > 0.4 * L) break;   // must move steadily from a towards b, close to the way
+            last = t; mid.push(id);
+          }
+          if (ok && (!best || mid.length > best.length)) best = mid;
+        }
+      }
+    }
+    return best;
+  };
   for (const l of lines) {
-    const n = l.seq.length, deg = new Map();
+    const n = l.seq.length, deg = new Map(), stops = new Set(l.seq);
     l.seq.forEach(id => node(id).lines.add(l));
-    const steps = n === 2 ? 1 : n, mine = new Set();
-    for (let i = 0; i < steps; i++) {
-      const a = l.seq[i], b = l.seq[(i + 1) % n];
+    // the full path, stops plus the ones it runs through without stopping, as a cycle like the game's own list
+    const pairs = n === 2 ? [[l.seq[0], l.seq[1]], [l.seq[1], l.seq[0]]] : l.seq.map((id, i) => [id, l.seq[(i + 1) % n]]);
+    const path = [];
+    l.pass = new Set();
+    for (const [a, b] of pairs) {
+      path.push(a);
+      if (a === b) continue;
+      const mid = opt.express ? via(l, a, b) : null;
+      if (mid) for (const id of mid) { path.push(id); if (!stops.has(id)) l.pass.add(id); }
+    }
+    const P = path.length, mine = new Set();
+    for (let i = 0; i < P; i++) {
+      const a = path[i], b = path[(i + 1) % P];
       if (a === b) continue;
       const lo = a < b ? a : b, hi = a < b ? b : a, key = lo + "|" + hi;
       let e = edges.get(key);
@@ -553,13 +597,11 @@ function layout(net, opt) {
       node(a).nbrs.add(b); node(b).nbrs.add(a);
     }
     l.ends = [];
-    for (const [id, d] of deg) if (d === 1) { st.get(id).ends++; l.ends.push(id); }   // a there-and-back line has real ends, a loop has none
-    const loop = !l.ends.length;
-    if (loop) l.ends.push(l.seq[0]);
-    // which stops the line runs through, with the stop before and after: the layout tries to keep those straight
-    for (let i = 0; i < n; i++) {
-      if (!loop && (i === 0 || i === n - 1)) continue;
-      const a = l.seq[(i - 1 + n) % n], b = l.seq[(i + 1) % n], m = node(l.seq[i]);
+    for (const [id, d] of deg) if (d === 1 && stops.has(id)) { st.get(id).ends++; l.ends.push(id); }   // a there-and-back line has real ends, a loop has none
+    if (!l.ends.length) l.ends.push(l.seq[0]);
+    // which stops the line runs through, with the one before and after: the layout tries to keep those straight
+    for (let i = 0; i < P; i++) {
+      const a = path[(i - 1 + P) % P], b = path[(i + 1) % P], m = node(path[i]);
       if (a === b || a === m.id || b === m.id) continue;
       (m.thru || (m.thru = [])).push([a, b]);
     }
@@ -913,7 +955,7 @@ function build(net, lay, opt) {
         }
         clean.push(pts[pts.length - 1]);
         const w = lw(l), dash = dashOf(l);
-        items.push({ t: "path", d: offsetPath(clean, 0, CELL * 0.3), stroke: colOf(l), width: w, dash: dash ? dash.map(v => v * w) : null, line: l });
+        items.push({ t: "path", d: offsetPath(clean, 0, CELL * 0.3), stroke: colOf(l), width: w, dash: dash ? dash.map(v => v * w) : null, line: l, ed });
       }
       for (const [p, q] of ed.steps) {
         const P = toPx(p), Q = toPx(q), h = bundle.get(keyOf(p, q)[0]).half;
@@ -929,7 +971,7 @@ function build(net, lay, opt) {
     ed.lines.forEach((l, i) => {
       const off = cursor + widths[i] / 2; cursor += widths[i] + gap;
       const dash = dashOf(l);
-      items.push({ t: "path", d: offsetPath(pts, off, CELL * 0.42), stroke: colOf(l), width: widths[i], dash: dash ? dash.map(v => v * widths[i]) : null, line: l });
+      items.push({ t: "path", d: offsetPath(pts, off, CELL * 0.42), stroke: colOf(l), width: widths[i], dash: dash ? dash.map(v => v * widths[i]) : null, line: l, ed });
     });
     for (let i = 0; i < pts.length - 1; i++) {
       const L = Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]), st = Math.max(1, Math.round(L / 9));
@@ -971,6 +1013,19 @@ function build(net, lay, opt) {
       n.rx = Math.abs(pill.px) * (pill.span + sw) + Math.abs(pill.py) * (pill.thick / 2 + sw);
       n.ry = Math.abs(pill.py) * (pill.span + sw) + Math.abs(pill.px) * (pill.thick / 2 + sw);
     } else marks.push({ t: "circle", x, y, r, fill: sh.stop, stroke: inter ? sh.ink : colOf(only), sw, station: n.id });
+  }
+
+  // stops a line runs through without stopping: draw that line over the stop again, clipped to it,
+  // so it visibly passes by instead of looking like it calls there
+  const passing = [];
+  for (const l of lay.lines) if (l.pass && l.pass.size) for (const id of l.pass) {
+    const n = byId.get(id); if (!n || n.px == null) continue;
+    const mine = items.filter(it => it.line === l && it.ed && (it.ed.a === id || it.ed.b === id));
+    if (!mine.length) continue;
+    const pad = (n.rx != null ? Math.max(n.rx, n.ry) : n.r) + 3;
+    passing.push({ t: "clip", box: [n.px - pad, n.py - pad, n.px + pad, n.py + pad] });
+    for (const it of mine) passing.push(Object.assign({}, it));
+    passing.push({ t: "unclip" });
   }
 
   // town areas; their names go on top of the lines, at whichever corner is clearest
@@ -1167,7 +1222,7 @@ function build(net, lay, opt) {
       }
     }
   }
-  const mapItems = [...waterItems, ...areas, ...items, ...marks, ...badges, ...signs, ...townLabels, ...labels];
+  const mapItems = [...waterItems, ...areas, ...items, ...marks, ...passing, ...badges, ...signs, ...townLabels, ...labels];
   if (dx || dy) for (const it of mapItems) shiftItem(it, dx, dy);
   const mapBottom = crop[3];
 
@@ -1407,10 +1462,16 @@ $("lpShow").addEventListener("click", () => {
 /* ---------- state and wiring ---------- */
 let net = null, lay = null, dl = null, vb = null, fitted = false;
 const view = $("view");
+// the map title: what the person typed, otherwise the company from the export, otherwise a plain default
+function mapTitle() {
+  const v = $("title").value.trim();
+  if (v && v !== "Network Map") return v;
+  return net && net.company ? net.company : "Network Map";
+}
 const opts = () => ({
   carriers: new Set([...document.querySelectorAll("#carriers input:checked")].map(i => i.value)),
   even: +$("even").value / 100, density: +$("dens").value / 100, thick: +$("thick").value / 100,
-  title: $("title").value.trim(), geo: $("layoutMode").value === "geo", tight: $("tight").checked, badges: $("badges").checked, pills: $("pills").checked, places: $("places").checked, water: $("water").checked, areas: $("areas").checked, names: $("names").value, net: $("netMode").value, labels: $("labels").value, fsize: +$("fsize").value, sheet: $("sheet").value
+  title: mapTitle(), geo: $("layoutMode").value === "geo", tight: $("tight").checked, badges: $("badges").checked, pills: $("pills").checked, express: $("express").checked, places: $("places").checked, water: $("water").checked, areas: $("areas").checked, names: $("names").value, net: $("netMode").value, labels: $("labels").value, fsize: +$("fsize").value, sheet: $("sheet").value
 });
 function redraw(refit) {
   $("evenOut").textContent = $("even").value + "%"; $("densOut").textContent = $("dens").value + "%";
@@ -1451,7 +1512,7 @@ function setStatus(msg, bad) { const s = $("status"); s.textContent = msg; s.cla
 function load(text, label) {
   try {
     const n = prepare(toNetwork(parseExport(text)));
-    net = n; pins.clear(); buildFilters(); redraw(true);
+    net = n; pins.clear(); $("title").placeholder = n.company || "Network Map"; buildFilters(); redraw(true);
     let msg = "";
     if (n.missing) msg += `${n.missing} stops had no position and were left out. `;
     if (n.diagnostics.length) msg += `The mod could not read ${n.diagnostics.length} things from the game (${n.diagnostics.slice(0, 4).map(d => d.call).join(", ")}).`;
@@ -1518,6 +1579,7 @@ $("netMode").addEventListener("change", () => redraw(true));
 ["thick", "fsize", "title"].forEach(id => $(id).addEventListener("input", () => redraw(false)));
 $("colors").addEventListener("change", () => { applyColors(net, $("colors").value); buildFilters(); redraw(false); });
 ["labels", "sheet", "areas", "names", "badges", "pills", "places", "water", "tight"].forEach(id => $(id).addEventListener("change", () => redraw(false)));
+$("express").addEventListener("change", () => redraw(true));
 $("unpin").addEventListener("click", () => { pins.clear(); redraw(false); });
 $("fit").addEventListener("click", fit); $("zin").addEventListener("click", () => zoom(0.8)); $("zout").addEventListener("click", () => zoom(1.25));
 view.addEventListener("wheel", ev => { ev.preventDefault(); zoom(ev.deltaY > 0 ? 1.12 : 0.89, ev.clientX, ev.clientY); }, { passive: false });
@@ -1572,7 +1634,7 @@ window.addEventListener("resize", () => { if (dl && !$("map").hidden) fit(); });
 /* ---------- saving ---------- */
 let sayTimer = null;
 const say = m => { const el = $("saveMsg"); el.textContent = m; el.hidden = !m; clearTimeout(sayTimer); if (m) sayTimer = setTimeout(() => { el.hidden = true; }, 3200); };
-const fileStem = () => (($("title").value.trim() || "route-map").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "route-map");
+const fileStem = () => ((mapTitle() || "route-map").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "route-map");
 // Inside Claude the page saves through the downloads capability; opened as a local file it uses a normal browser download.
 let downloads = null;
 const local = !(window.claude && window.claude.use);
@@ -1634,7 +1696,7 @@ async function openShared() {
 }
 
 // remember the viewer's settings in this browser (not the map data itself)
-const KEEP = ["layoutMode", "title", "even", "dens", "thick", "labels", "fsize", "sheet", "colors", "badges", "pills", "places", "water", "tight", "areas", "names", "netMode"];
+const KEEP = ["layoutMode", "title", "even", "dens", "thick", "labels", "fsize", "sheet", "colors", "badges", "pills", "express", "places", "water", "tight", "areas", "names", "netMode"];
 const STORE = "tf3-route-map-settings";
 try {
   const saved = JSON.parse(localStorage.getItem(STORE) || "{}");
