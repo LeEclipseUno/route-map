@@ -132,6 +132,17 @@ button:hover, .btn:hover { border-color: var(--on-navy); }
 /* line badge */
 .bdg { display: inline-grid; place-items: center; min-width: 46px; height: 30px; padding: 0 8px; border-radius: 8px; font-weight: 900; font-size: 15px; }
 
+/* line diagram */
+.diagram { position: fixed; inset: 0; z-index: 60; overflow-y: auto; background: rgba(8, 14, 26, 0.72); padding: 40px 16px; }
+.dg-card { max-width: 1200px; margin: 0 auto; background: var(--card); color: var(--ink); border-radius: var(--radius); overflow: hidden; box-shadow: 0 40px 80px -30px rgba(0,0,0,.8); }
+.dg-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 18px 24px; background: var(--navy); color: var(--on-navy); }
+.dg-top h2 { font-family: var(--head); font-weight: 800; font-size: 22px; margin: 0; }
+.dg-top p { margin: 2px 0 0; font-size: 13px; color: var(--on-navy-soft); }
+.dg-top .row button { color: var(--ink); background: var(--card-3); border-color: var(--rule); }
+.dg-top .row .go { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.dg-view { overflow-x: auto; padding: 22px 24px 26px; }
+.dg-view svg { display: block; height: auto; max-width: none; border-radius: 10px; box-shadow: 0 0 0 1px var(--rule); }
+
 /* line page */
 .linepage { position: fixed; inset: 0; z-index: 50; overflow-y: auto; background: rgba(8, 14, 26, 0.6); padding: 40px 16px; }
 .lp-card { max-width: 1000px; margin: 0 auto; background: var(--card); color: var(--ink); border-radius: var(--radius); overflow: hidden; box-shadow: 0 40px 80px -30px rgba(0,0,0,.8); }
@@ -303,6 +314,15 @@ input[type="range"] { width: 100%; accent-color: var(--navy); }
 </section>
 
 <div class="scrim" id="scrim" hidden></div>
+<div class="diagram" id="diagramPage" role="dialog" aria-modal="true" aria-labelledby="dgTitle" hidden>
+  <div class="dg-card">
+    <div class="dg-top">
+      <div><h2 id="dgTitle">Line diagram</h2><p>The line as one strip, like the board above the doors. Scroll sideways for long lines.</p></div>
+      <div class="row"><button id="dgPng" type="button" class="go">Save PNG</button><button id="dgSvg" type="button">Save SVG</button><button id="dgClose" type="button">Close</button></div>
+    </div>
+    <div class="dg-view" id="dgView"></div>
+  </div>
+</div>
 <div class="linepage" id="linePage" role="dialog" aria-modal="true" aria-labelledby="lpTitle" hidden>
   <div class="lp-card">
     <div class="lp-head" id="lpHead"></div>
@@ -330,7 +350,7 @@ input[type="range"] { width: 100%; accent-color: var(--navy); }
         </div>
         <p class="lp-note" id="lpNote" hidden>Export again with the current mod to see vehicles and load for this line.</p>
         <div class="lp-mini" id="lpMini"></div>
-        <div class="row"><button id="lpShow" type="button" class="go">Show on the map</button><button id="lpClose" type="button">Close</button></div>
+        <div class="row"><button id="lpShow" type="button" class="go">Show on the map</button><button id="lpDiagram" type="button">Line diagram</button><button id="lpClose" type="button">Close</button></div>
       </div>
       <ol class="lp-stops" id="lpStops"></ol>
     </div>
@@ -351,6 +371,9 @@ input[type="range"] { width: 100%; accent-color: var(--navy); }
     <div class="field"><label for="netMode">Network</label>
       <select id="netMode"><option value="passengers">Passengers</option><option value="freight">Freight</option><option value="all">Both</option></select></div>
     <div class="field"><span class="lab">Kinds</span><div class="chips" id="carriers"></div></div>
+    <div class="switches">
+      <label class="switch" title="Lines with exactly the same stops, like a ring in both directions, are drawn as one"><span>Merge matching lines</span><input type="checkbox" id="merge" checked></label>
+    </div>
     <div class="field">
       <span class="lab">Lines <span><button type="button" id="allOn" class="mini">All</button> <button type="button" id="allOff" class="mini">None</button></span></span>
       <div class="lines-box">
@@ -387,6 +410,7 @@ input[type="range"] { width: 100%; accent-color: var(--navy); }
     <div class="switches">
       <label class="switch"><span>Line badges</span><input type="checkbox" id="badges" checked></label>
       <label class="switch"><span>Interchange pills</span><input type="checkbox" id="pills" checked></label>
+      <label class="switch"><span>Busy stations</span><input type="checkbox" id="busy" checked></label>
       <label class="switch"><span>Express beside local</span><input type="checkbox" id="express" checked></label>
       <label class="switch"><span>Industries and depots</span><input type="checkbox" id="places" checked></label>
     </div>
@@ -496,7 +520,7 @@ function toNetwork(raw) {
   const stations = new Map();
   for (const s of raw.stations) {
     if (!s || !Array.isArray(s.pos) || typeof s.pos[0] !== "number" || typeof s.pos[1] !== "number") continue;
-    stations.set(s.id, { id: s.id, name: s.name || ("Stop " + s.id), x: s.pos[0], y: s.pos[1], town: s.town, cargo: s.cargo === true, passengers: s.passengers === true, built: dateNum(s.built) });
+    stations.set(s.id, { id: s.id, name: s.name || ("Stop " + s.id), x: s.pos[0], y: s.pos[1], town: s.town, cargo: s.cargo === true, passengers: s.passengers === true, built: dateNum(s.built), waiting: typeof s.waiting === "number" ? s.waiting : 0 });
   }
   const towns = new Map();
   for (const t of (raw.towns || [])) if (t && t.name) towns.set(t.id, { id: t.id, name: t.name });
@@ -537,7 +561,8 @@ const DASH = { WATER: [1.6, 1.3], AIR: [0.2, 1.7] };
 const pins = new Map();
 
 function layout(net, opt) {
-  const lines = net.lines.filter(l => l.on && opt.carriers.has(l.carrier) && l.seq.length >= 2 && (opt.net === "all" || (opt.net === "freight") === !!l.cargo));
+  const lines = net.lines.filter(l => l.on && opt.carriers.has(l.carrier) && l.seq.length >= 2 && (opt.net === "all" || (opt.net === "freight") === !!l.cargo)
+    && !(opt.merge && l.twinOf && l.twinOf.on));
   const st = new Map(), edges = new Map();
   const node = id => { let n = st.get(id); if (!n) { const s = net.stations.get(id); n = { id, name: s.name, town: s.town, x: s.x, y: s.y, lines: new Set(), nbrs: new Set(), ends: 0 }; st.set(id, n); } return n; };
   // Express and local: when a line skips stops that another line of the same kind serves in between,
@@ -979,6 +1004,18 @@ function build(net, lay, opt) {
     }
   }
 
+  // busy stations: a soft circle under the stop that grows with the people waiting there
+  const halos = [];
+  if (opt.busy && !sh.mono) {
+    const maxW = Math.max(0, ...lay.nodes.map(n => (net.stations.get(n.id) || {}).waiting || 0));
+    if (maxW > 0) for (const n of lay.nodes) {
+      const w = (net.stations.get(n.id) || {}).waiting || 0;
+      if (w <= 0) continue;
+      const [x, y] = px(n), r = CELL * 0.18 + Math.sqrt(w / maxW) * CELL * 0.62;
+      halos.push({ t: "circle", x, y, r, fill: "#e5a84b", fo: 0.28, stroke: "#e5a84b", sw: 0.01, so: 0 });
+    }
+  }
+
   // stops
   const marks = [];
   for (const n of lay.nodes) {
@@ -1222,7 +1259,7 @@ function build(net, lay, opt) {
       }
     }
   }
-  const mapItems = [...waterItems, ...areas, ...items, ...marks, ...passing, ...badges, ...signs, ...townLabels, ...labels];
+  const mapItems = [...waterItems, ...areas, ...halos, ...items, ...marks, ...passing, ...badges, ...signs, ...townLabels, ...labels];
   if (dx || dy) for (const it of mapItems) shiftItem(it, dx, dy);
   const mapBottom = crop[3];
 
@@ -1280,7 +1317,7 @@ function toSvgInner(dl) {
     const dline = it.line ? ` data-line="${esc(String(it.line.id))}"` : "";
     if (it.t === "rect") return `<rect${dline}${it.fresh ? ` class="pop"` : ""} x="${f1(it.x)}" y="${f1(it.y)}" width="${f1(it.w)}" height="${f1(it.h)}" fill="${it.fill}"${it.fo != null ? ` fill-opacity="${it.fo}"` : ""}${it.stroke ? ` stroke="${it.stroke}" stroke-width="${f1(it.sw || 1)}"` : ""}${it.rx ? ` rx="${f1(it.rx)}"` : ""}/>`;
     if (it.t === "path") return `<path${dline}${it.station != null ? ` data-station="${it.station}"` : ""}${it.fresh && !it.dash && it.station == null ? ` class="drawin" pathLength="1"` : it.fresh ? ` class="fadein"` : ""} d="${it.d.map(c => c[0] + c.slice(1).map(f1).join(" ")).join("")}" fill="none" stroke="${it.stroke}" stroke-width="${f1(it.width)}" stroke-linecap="${it.butt || it.dash ? "butt" : "round"}" stroke-linejoin="round"${it.dash ? ` stroke-dasharray="${it.dash.map(f1).join(" ")}"` : ""}/>`;
-    if (it.t === "circle") return `<circle${it.fresh ? ` class="pop"` : ""} cx="${f1(it.x)}" cy="${f1(it.y)}" r="${f1(it.r)}" fill="${it.fill}" stroke="${it.stroke}" stroke-width="${f1(it.sw)}"${it.station != null ? ` data-station="${it.station}"` : ""}/>`;
+    if (it.t === "circle") return `<circle${it.fresh ? ` class="pop"` : ""} cx="${f1(it.x)}" cy="${f1(it.y)}" r="${f1(it.r)}" fill="${it.fill}"${it.fo != null ? ` fill-opacity="${it.fo}"` : ""} stroke="${it.stroke}" stroke-width="${f1(it.sw)}"${it.so != null ? ` stroke-opacity="${it.so}"` : ""}${it.station != null ? ` data-station="${it.station}"` : ""}/>`;
     return `<text${dline}${it.fresh ? ` class="fadein"` : ""} x="${f1(it.x)}" y="${f1(it.y)}" font-family='${FONT}' font-size="${it.size}" font-weight="${it.weight}" fill="${it.fill}" text-anchor="${it.anchor}"${it.ls ? ` letter-spacing="${it.ls}"` : ""}${it.halo ? ` stroke="${it.halo}" stroke-width="${f1(it.size * 0.3)}" stroke-linejoin="round" paint-order="stroke"` : ""}>${esc(it.s)}</text>`;
   }).join("");
 }
@@ -1305,7 +1342,7 @@ function toCanvas(dl, scale) {
       g.beginPath();
       for (const c2 of it.d) { if (c2[0] === "M") g.moveTo(c2[1], c2[2]); else if (c2[0] === "L") g.lineTo(c2[1], c2[2]); else g.quadraticCurveTo(c2[1], c2[2], c2[3], c2[4]); }
       g.strokeStyle = it.stroke; g.lineWidth = it.width; g.lineCap = it.butt || it.dash ? "butt" : "round"; g.setLineDash(it.dash || []); g.stroke(); g.setLineDash([]);
-    } else if (it.t === "circle") { g.beginPath(); g.arc(it.x, it.y, it.r, 0, Math.PI * 2); g.fillStyle = it.fill; g.fill(); g.strokeStyle = it.stroke; g.lineWidth = it.sw; g.stroke(); }
+    } else if (it.t === "circle") { g.beginPath(); g.arc(it.x, it.y, it.r, 0, Math.PI * 2); g.fillStyle = it.fill; g.globalAlpha = it.fo != null ? it.fo : 1; g.fill(); g.globalAlpha = it.so != null ? it.so : 1; g.strokeStyle = it.stroke; g.lineWidth = it.sw; g.stroke(); g.globalAlpha = 1; }
     else {
       g.font = `${it.weight} ${it.size}px ${FONT}`; g.textAlign = it.anchor === "middle" ? "center" : it.anchor; g.textBaseline = "alphabetic";
       try { g.letterSpacing = (it.ls || 0) + "px"; } catch (e) { /* older engines ignore spacing */ }
@@ -1327,6 +1364,17 @@ function siteFacts() {
   for (const id of used) { const t = net.towns.get(net.stations.get(id).town); if (t) townCount.set(t.name, (townCount.get(t.name) || 0) + 1); }
   const towns = [...townCount.entries()].sort((a, b) => b[1] - a[1]).map(e => e[0]);
   return { used, servedBy, towns };
+}
+// the other lines at a stop, without this line's own twins and without twins shown twice
+function interchangesAt(f, id, l) {
+  const out = [];
+  for (const o of (f.servedBy.get(id) || [])) {
+    if (o === l || merged(o, l)) continue;
+    if ($("merge").checked && o.twinOf && out.includes(o.twinOf)) continue;
+    if ($("merge").checked && out.some(x => x.twinOf === o)) continue;
+    out.push(o);
+  }
+  return out;
 }
 function badgeHtml(l) {
   return `<span class="bdg" style="background:${l.color};color:${inkOn(l.color)}" title="${esc(l.name)}">${esc(l.badge)}</span>`;
@@ -1370,14 +1418,15 @@ function openLine(l) {
   const towns = [...new Set(seq.map(id => net.towns.get(net.stations.get(id).town)).filter(Boolean).map(t => t.name))];
   facts.push(["Towns", towns.length]);
   if (l.cargoTypes && l.cargoTypes.length) facts.push(["Carries", l.cargoTypes.join(", ")]);
+  if ($("merge").checked && l.twins && l.twins.length) facts.push(["Merged lines", 1 + l.twins.length]);
   $("lpFacts").innerHTML = facts.map(x => `<div><dt>${x[0]}</dt><dd>${esc(x[1])}</dd></div>`).join("");
   renderBadge(l);
   renderOpened(l);
   $("lpNote").hidden = l.vehicles != null;
   // stop list, in running order
   $("lpStops").innerHTML = seq.map(id => {
-    const st = net.stations.get(id), town = net.towns.get(st.town), others = (f.servedBy.get(id) || []).filter(o => o !== l);
-    return `<li class="${others.length ? "x" : ""}"><b>${esc(st.name)}</b><span>${esc(town ? town.name : "Outside town")}</span>${others.length ? `<span class="bdgs">${others.map(o => badgeHtml(o)).join("")}</span>` : ""}</li>`;
+    const st = net.stations.get(id), town = net.towns.get(st.town), others = interchangesAt(f, id, l);
+    return `<li class="${others.length ? "x" : ""}"><b>${esc(st.name)}</b><span>${esc(town ? town.name : "Outside town")}${st.waiting > 0 ? " · " + st.waiting + " waiting" : ""}</span>${others.length ? `<span class="bdgs">${others.map(o => badgeHtml(o)).join("")}</span>` : ""}</li>`;
   }).join("") + (loop ? `<li><b>${esc(first)}</b><span>Back to the start of the loop</span></li>` : "");
   // mini map: the whole map faded, this line on top, framed on the line
   $("lpMini").innerHTML = lineMapSvg(l);
@@ -1447,10 +1496,97 @@ function lineMapSvg(l) {
   const mine = dl.items.filter(it => it.line === l || ((it.t === "circle" || it.t === "path") && it.station != null && ids.has(it.station)));
   return `<svg viewBox="${f1(x0)} ${f1(y0)} ${f1(w)} ${f1(h)}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Map of this line"><g opacity="0.3">${toSvgInner(dl)}</g>${toSvgInner({ items: mine })}</svg>`;
 }
+/* ---------- line diagram: the line as one horizontal strip ---------- */
+let diagramDl = null, diagramLine = null;
+function lineDiagram(l) {
+  const sh = SHEETS[$("sheet").value] || SHEETS.paper, f = siteFacts();
+  const seq = [...new Set(l.seq)], loop = l.ends && l.ends.length === 1 && l.seq.length > 2;
+  const col = sh.mono ? "#111111" : l.color, ink = sh.ink;
+  const size = 15, lh = size * 1.15, M = 64, top = 112;
+  const rowsOf = name => {
+    if (name.length <= 16 || !name.includes(" ")) return [name];
+    const mid = name.length / 2; let cut = -1;
+    for (let i = 0; i < name.length; i++) if (name[i] === " " && (cut < 0 || Math.abs(i - mid) < Math.abs(cut - mid))) cut = i;
+    return [name.slice(0, cut), name.slice(cut + 1)];
+  };
+  const stops = seq.map((id, i) => {
+    const st = net.stations.get(id), end = !loop && (i === 0 || i === seq.length - 1);
+    const rows = rowsOf(st.name), weight = end ? 800 : 600;
+    return { id, rows, weight, w: Math.max(...rows.map(r => textW(r, size, weight))), others: interchangesAt(f, id, l) };
+  });
+  // labels alternate above and below, so only every second label needs room next to its neighbour
+  let step = 96;
+  for (let i = 0; i + 2 < stops.length; i++) step = Math.max(step, (stops[i].w + stops[i + 2].w) / 4 + 12);
+  for (let i = 0; i + 1 < stops.length; i++) step = Math.max(step, (stops[i].others.length + stops[i + 1].others.length) * 19 + 16);
+  // height: header, then the tallest label stack above the line, then the one below
+  const above = Math.max(1, ...stops.filter((_, i) => i % 2 === 0).map(s => s.rows.length));
+  const below = Math.max(1, ...stops.filter((_, i) => i % 2 === 1).map(s => s.rows.length), stops.some((s, i) => i % 2 === 0 && s.others.length) ? 1 : 0);
+  const badgeRow = st => st.others.reduce((a, o) => a + Math.max(26, textW(o.badge, 11, 800) + 10) + 4, 0);
+  const lineY = top + 26 + lh * above + 6, x0 = M + Math.max(40, stops[0].w / 2, badgeRow(stops[0]) / 2);
+  const xs = stops.map((_, i) => x0 + i * step);
+  const tail = loop ? 150 : 0;
+  const W = Math.ceil(xs[xs.length - 1] + Math.max(40, stops[stops.length - 1].w / 2, badgeRow(stops[stops.length - 1]) / 2) + tail + M), H = Math.ceil(lineY + 26 + lh * below + 44);
+  const items = [{ t: "rect", x: 0, y: 0, w: W, h: H, fill: sh.bg }, { t: "rect", x: 0, y: 0, w: W, h: 10, fill: col }];
+  // header: badge, where it runs, the line's game name
+  const bw = Math.max(46, textW(l.badge, 20, 800) + 20);
+  items.push({ t: "rect", x: M, y: 40, w: bw, h: 34, fill: col, rx: 7 });
+  items.push({ t: "text", x: M + bw / 2, y: 64, s: l.badge, size: 20, weight: 800, fill: sh.mono ? "#ffffff" : inkOn(l.color), anchor: "middle" });
+  const first = net.stations.get(seq[0]).name, last = net.stations.get(seq[seq.length - 1]).name;
+  items.push({ t: "text", x: M + bw + 16, y: 64, s: loop ? "Circular from " + first : first + "  to  " + last, size: 26, weight: 800, fill: ink, anchor: "start", ls: -0.3 });
+  items.push({ t: "text", x: M, y: 98, s: l.name + "  ·  " + (GROUP_NAME[l.carrier] || "") + "  ·  " + seq.length + " stops", size: 13, weight: 600, fill: sh.sub, anchor: "start", ls: 0.3 });
+  // the line itself
+  const th = 14;
+  items.push({ t: "path", d: [["M", xs[0], lineY], ["L", xs[xs.length - 1] + (loop ? tail - 40 : 0), lineY]], stroke: col, width: th });
+  if (loop) {
+    const ax = xs[xs.length - 1] + tail - 40;
+    items.push({ t: "path", d: [["M", ax - 12, lineY - 14], ["L", ax + 6, lineY], ["L", ax - 12, lineY + 14]], stroke: col, width: 6 });
+    items.push({ t: "text", x: ax + 18, y: lineY + 5, s: "back to " + first, size: 13, weight: 700, fill: sh.sub, anchor: "start" });
+  }
+  stops.forEach((s, i) => {
+    const x = xs[i], up = i % 2 === 0, inter = s.others.length > 0;
+    items.push({ t: "circle", x, y: lineY, r: inter ? 13 : 10, fill: sh.stop, stroke: inter ? ink : col, sw: inter ? 4.5 : 4 });
+    // name on one side of the line, the other lines' badges on the other side
+    const gap = 26, h = lh * (s.rows.length - 1);
+    s.rows.forEach((row, k) => items.push({ t: "text", x, y: up ? lineY - gap - h + k * lh : lineY + gap + size * 0.8 + k * lh, s: row, size, weight: s.weight, fill: ink, anchor: "middle" }));
+    if (inter) {
+      const bws = s.others.map(o => Math.max(26, textW(o.badge, 11, 800) + 10)), total = bws.reduce((a, b) => a + b, 0) + 4 * (bws.length - 1);
+      let bx = x - total / 2;
+      const by = up ? lineY + 22 : lineY - 22 - 17;
+      s.others.forEach((o, k) => {
+        items.push({ t: "rect", x: bx, y: by, w: bws[k], h: 17, fill: sh.mono ? "#111111" : o.color, rx: 4 });
+        items.push({ t: "text", x: bx + bws[k] / 2, y: by + 12.5, s: o.badge, size: 11, weight: 800, fill: sh.mono ? "#ffffff" : inkOn(o.color), anchor: "middle" });
+        bx += bws[k] + 4;
+      });
+    }
+  });
+  return { w: W, h: H, items };
+}
+function openDiagram(l) {
+  diagramLine = l; diagramDl = lineDiagram(l);
+  $("dgTitle").textContent = "Line diagram · " + l.badge;
+  $("dgView").innerHTML = toSvgFile(diagramDl).replace("<svg ", `<svg style="width:${Math.min(diagramDl.w, 4000)}px" `);
+  $("diagramPage").hidden = false;
+  $("dgClose").focus({ preventScroll: true });
+}
+function closeDiagram() { $("diagramPage").hidden = true; }
+const diagramStem = () => ("line-" + diagramLine.badge).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+$("lpDiagram").addEventListener("click", () => { if (pageLine) openDiagram(pageLine); });
+$("dgClose").addEventListener("click", closeDiagram);
+$("diagramPage").addEventListener("click", ev => { if (ev.target === $("diagramPage")) closeDiagram(); });
+$("dgSvg").addEventListener("click", () => save(diagramStem() + ".svg", toSvgFile(diagramDl)));
+$("dgPng").addEventListener("click", () => {
+  const scale = Math.min(3, 8000 / Math.max(diagramDl.w, diagramDl.h));
+  toCanvas(diagramDl, scale).toBlob(b => b ? save(diagramStem() + ".png", b) : say("The PNG could not be drawn"), "image/png");
+});
+
 function closeLine() { $("linePage").hidden = true; document.body.style.overflow = ""; pageLine = null; }
 $("lpClose").addEventListener("click", closeLine);
 $("linePage").addEventListener("click", ev => { if (ev.target === $("linePage")) closeLine(); });
-document.addEventListener("keydown", ev => { if (ev.key === "Escape" && !$("linePage").hidden) closeLine(); });
+document.addEventListener("keydown", ev => {
+  if (ev.key !== "Escape") return;
+  if (!$("diagramPage").hidden) { closeDiagram(); return; }
+  if (!$("linePage").hidden) closeLine();
+});
 $("lpShow").addEventListener("click", () => {
   const l = pageLine; closeLine();
   const b = l && lineBox(l); if (!b) return;
@@ -1471,7 +1607,7 @@ function mapTitle() {
 const opts = () => ({
   carriers: new Set([...document.querySelectorAll("#carriers input:checked")].map(i => i.value)),
   even: +$("even").value / 100, density: +$("dens").value / 100, thick: +$("thick").value / 100,
-  title: mapTitle(), geo: $("layoutMode").value === "geo", tight: $("tight").checked, badges: $("badges").checked, pills: $("pills").checked, express: $("express").checked, places: $("places").checked, water: $("water").checked, areas: $("areas").checked, names: $("names").value, net: $("netMode").value, labels: $("labels").value, fsize: +$("fsize").value, sheet: $("sheet").value
+  title: mapTitle(), geo: $("layoutMode").value === "geo", tight: $("tight").checked, badges: $("badges").checked, pills: $("pills").checked, merge: $("merge").checked, busy: $("busy").checked, express: $("express").checked, places: $("places").checked, water: $("water").checked, areas: $("areas").checked, names: $("names").value, net: $("netMode").value, labels: $("labels").value, fsize: +$("fsize").value, sheet: $("sheet").value
 });
 function redraw(refit) {
   $("evenOut").textContent = $("even").value + "%"; $("densOut").textContent = $("dens").value + "%";
@@ -1501,7 +1637,25 @@ function zoom(f, cx, cy) {
 }
 const toSheet = ev => { const r = view.getBoundingClientRect(); return [vb[0] + (ev.clientX - r.left) / r.width * vb[2], vb[1] + (ev.clientY - r.top) / r.height * vb[3]]; };
 
-function prepare(n) { applyColors(n, $("colors").value); assignBadges(n); return n; }
+function prepare(n) { applyColors(n, $("colors").value); assignBadges(n); findTwins(n); return n; }
+// Lines that serve exactly the same stops (a ring in both directions, or A to B and B to A as two
+// game lines) are one service on a real map. The first one stays, the others ride along with it.
+function findTwins(n) {
+  const groups = new Map();
+  for (const l of n.lines) {
+    l.twinOf = null; l.twins = [];
+    const stops = [...new Set(l.seq)];
+    if (stops.length < 2) continue;
+    const key = l.carrier + "|" + stops.sort((a, b) => a - b).join(",");
+    (groups.get(key) || groups.set(key, []).get(key)).push(l);
+  }
+  for (const g of groups.values()) {
+    if (g.length < 2) continue;
+    g.sort((a, b) => a.order - b.order);
+    for (const t of g.slice(1)) { t.twinOf = g[0]; g[0].twins.push(t); }
+  }
+}
+const merged = (a, b) => $("merge").checked && (a.twinOf === b || b.twinOf === a || (a.twinOf && a.twinOf === b.twinOf));
 function buildFilters() {
   const present = new Set(net.lines.map(l => l.carrier));
   $("carriers").innerHTML = CARRIERS.filter(c => present.has(c[0])).map(c => `<label class="chip"><input type="checkbox" id="car-${c[0]}" value="${c[0]}" checked>${c[1]}</label>`).join("");
@@ -1580,6 +1734,8 @@ $("netMode").addEventListener("change", () => redraw(true));
 $("colors").addEventListener("change", () => { applyColors(net, $("colors").value); buildFilters(); redraw(false); });
 ["labels", "sheet", "areas", "names", "badges", "pills", "places", "water", "tight"].forEach(id => $(id).addEventListener("change", () => redraw(false)));
 $("express").addEventListener("change", () => redraw(true));
+$("merge").addEventListener("change", () => redraw(true));
+$("busy").addEventListener("change", () => redraw(false));
 $("unpin").addEventListener("click", () => { pins.clear(); redraw(false); });
 $("fit").addEventListener("click", fit); $("zin").addEventListener("click", () => zoom(0.8)); $("zout").addEventListener("click", () => zoom(1.25));
 view.addEventListener("wheel", ev => { ev.preventDefault(); zoom(ev.deltaY > 0 ? 1.12 : 0.89, ev.clientX, ev.clientY); }, { passive: false });
@@ -1696,7 +1852,7 @@ async function openShared() {
 }
 
 // remember the viewer's settings in this browser (not the map data itself)
-const KEEP = ["layoutMode", "title", "even", "dens", "thick", "labels", "fsize", "sheet", "colors", "badges", "pills", "express", "places", "water", "tight", "areas", "names", "netMode"];
+const KEEP = ["layoutMode", "title", "even", "dens", "thick", "labels", "fsize", "sheet", "colors", "badges", "pills", "merge", "busy", "express", "places", "water", "tight", "areas", "names", "netMode"];
 const STORE = "tf3-route-map-settings";
 try {
   const saved = JSON.parse(localStorage.getItem(STORE) || "{}");
