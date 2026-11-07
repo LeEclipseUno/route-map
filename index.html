@@ -96,6 +96,15 @@ button:hover, .btn:hover { border-color: var(--on-navy); }
 #view [data-line] { cursor: pointer; }
 .hud { position: absolute; left: 14px; bottom: 14px; display: flex; gap: 6px; }
 .hud button { min-width: 38px; justify-content: center; padding: 6px 10px 4px; border-radius: 10px; }
+.hud button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.mergebar { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 16px; background: var(--navy); color: var(--on-navy); border-radius: 999px; box-shadow: 0 14px 30px -12px rgba(0,0,0,.6); font-size: 14px; font-weight: 600; white-space: nowrap; }
+.mergebar button { color: var(--ink); background: var(--card-3); border-color: var(--rule); padding: 5px 14px 3px; border-radius: 999px; }
+.mergebar .go { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.mergebar .go:disabled { opacity: .45; cursor: default; }
+#view.picking circle[data-station] { cursor: copy; }
+.joined { display: grid; gap: 4px; background: var(--card-3); border-radius: 12px; padding: 8px; }
+.joined div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 13px; font-weight: 600; }
+.joined div span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hint { position: absolute; right: 14px; bottom: 14px; margin: 0; font-size: 12px; font-weight: 600; color: var(--soft); background: var(--card-3); padding: 5px 10px 3px; border-radius: 999px; }
 .savetoast { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); margin: 0; background: var(--navy); color: var(--on-navy); font-size: 13px; font-weight: 700; padding: 7px 14px 5px; border-radius: 999px; white-space: nowrap; }
 #view .drawin { stroke-dasharray: 1 1; stroke-dashoffset: 1; animation: drawin 1.6s cubic-bezier(.5,0,.2,1) forwards; }
@@ -164,6 +173,7 @@ button:hover, .btn:hover { border-color: var(--on-navy); }
 .lp-stops li.x::before { left: 5px; top: 11px; width: 24px; height: 24px; border-color: var(--ink); }
 .lp-stops b { font-family: var(--head); font-weight: 800; font-size: 17px; display: block; line-height: 1.25; }
 .lp-stops span { font-size: 13px; color: var(--soft); }
+.lp-stops b small { font-size: 12px; font-weight: 600; color: var(--soft); }
 .lp-stops .bdgs { display: inline-flex; gap: 4px; margin-left: 6px; vertical-align: 1px; }
 .lp-stops .bdg { min-width: 30px; height: 19px; font-size: 11px; border-radius: 5px; padding: 0 5px; }
 .lp-note { font-size: 13px; color: var(--soft); margin: 0 0 14px; }
@@ -291,8 +301,14 @@ input[type="range"] { width: 100%; accent-color: var(--navy); }
       <button id="zin" type="button" aria-label="Zoom in">+</button>
       <button id="zout" type="button" aria-label="Zoom out">&minus;</button>
       <button id="fit" type="button">Fit</button>
+      <button id="mergeBtn" type="button" title="Join stops that belong together into one interchange">Merge stops</button>
     </div>
-    <p class="hint">Drag to move, scroll to zoom, click a line for its stops. Shift and drag moves a stop.</p>
+    <div class="mergebar" id="mergeBar" hidden>
+      <span id="mergeMsg">Click the stops you want to join.</span>
+      <button id="mergeGo" type="button" class="go" disabled>Join</button>
+      <button id="mergeCancel" type="button">Cancel</button>
+    </div>
+    <p class="hint">Drag to move, scroll to zoom, click a line for its stops. Shift and drag moves a stop. Merge stops joins stops into one interchange.</p>
     <div class="tm-cap" id="tmCap" hidden aria-live="polite"></div>
     <p class="savetoast" id="saveMsg" role="status" hidden></p>
   </div>
@@ -399,6 +415,10 @@ input[type="range"] { width: 100%; accent-color: var(--navy); }
       <label class="switch"><span>Crop to the network</span><input type="checkbox" id="tight" checked></label>
     </div>
     <div class="row"><button id="unpin" type="button">Put moved stops back</button></div>
+    <div class="field" id="joinedBox" hidden>
+      <span class="lab">Joined stops <span><button type="button" id="unjoinAll" class="mini">Undo all</button></span></span>
+      <div class="joined" id="joinedList"></div>
+    </div>
   </section>
   <section data-tab="labels" hidden>
     <div class="field"><label for="title">Map title</label><input type="text" id="title" value="" placeholder="Your company name" maxlength="60"></div>
@@ -1426,7 +1446,7 @@ function openLine(l) {
   // stop list, in running order
   $("lpStops").innerHTML = seq.map(id => {
     const st = net.stations.get(id), town = net.towns.get(st.town), others = interchangesAt(f, id, l);
-    return `<li class="${others.length ? "x" : ""}"><b>${esc(st.name)}</b><span>${esc(town ? town.name : "Outside town")}${st.waiting > 0 ? " · " + st.waiting + " waiting" : ""}</span>${others.length ? `<span class="bdgs">${others.map(o => badgeHtml(o)).join("")}</span>` : ""}</li>`;
+    return `<li class="${others.length ? "x" : ""}"><b>${esc(st.name)}${st.joined && st.joined.length ? `<small> + ${esc(st.joined.join(", "))}</small>` : ""}</b><span>${esc(town ? town.name : "Outside town")}${st.waiting > 0 ? " · " + st.waiting + " waiting" : ""}</span>${others.length ? `<span class="bdgs">${others.map(o => badgeHtml(o)).join("")}</span>` : ""}</li>`;
   }).join("") + (loop ? `<li><b>${esc(first)}</b><span>Back to the start of the loop</span></li>` : "");
   // mini map: the whole map faded, this line on top, framed on the line
   $("lpMini").innerHTML = lineMapSvg(l);
@@ -1621,6 +1641,7 @@ function redraw(refit) {
   if (timeline && tmT != null) drawAt(tmT, false);
   renderSite();
   renderTimelineUi();
+  if (picking) markPicked();
 }
 function applyVb() { view.setAttribute("viewBox", vb.map(f1).join(" ")); }
 function fit() {
@@ -1637,7 +1658,31 @@ function zoom(f, cx, cy) {
 }
 const toSheet = ev => { const r = view.getBoundingClientRect(); return [vb[0] + (ev.clientX - r.left) / r.width * vb[2], vb[1] + (ev.clientY - r.top) / r.height * vb[3]]; };
 
-function prepare(n) { applyColors(n, $("colors").value); assignBadges(n); findTwins(n); return n; }
+function prepare(n) { joinStops(n); applyColors(n, $("colors").value); assignBadges(n); findTwins(n); return n; }
+// Stops the player joined by hand: the first stop of each group stays, the others are folded into it.
+function joinStops(n) {
+  const into = new Map();
+  for (const group of joinsFor(n)) {
+    const ids = group.map(Number).filter(id => n.stations.has(id));
+    if (ids.length < 2) continue;
+    const main = n.stations.get(ids[0]);
+    main.joined = [];
+    for (const id of ids.slice(1)) {
+      const st = n.stations.get(id);
+      into.set(id, ids[0]);
+      main.joined.push(st.name);
+      main.waiting = (main.waiting || 0) + (st.waiting || 0);
+      main.cargo = main.cargo || st.cargo; main.passengers = main.passengers || st.passengers;
+    }
+  }
+  if (!into.size) return;
+  for (const l of n.lines) {
+    const seq = [];
+    for (const id of l.seq) { const v = into.get(id) ?? id; if (seq[seq.length - 1] !== v) seq.push(v); }
+    while (seq.length > 1 && seq[0] === seq[seq.length - 1]) seq.pop();
+    l.seq = seq;
+  }
+}
 // Lines that serve exactly the same stops (a ring in both directions, or A to B and B to A as two
 // game lines) are one service on a real map. The first one stays, the others ride along with it.
 function findTwins(n) {
@@ -1666,7 +1711,7 @@ function setStatus(msg, bad) { const s = $("status"); s.textContent = msg; s.cla
 function load(text, label) {
   try {
     const n = prepare(toNetwork(parseExport(text)));
-    net = n; pins.clear(); $("title").placeholder = n.company || "Network Map"; buildFilters(); redraw(true);
+    net = n; pins.clear(); setPicking(false); $("title").placeholder = n.company || "Network Map"; buildFilters(); renderJoined(); redraw(true);
     let msg = "";
     if (n.missing) msg += `${n.missing} stops had no position and were left out. `;
     if (n.diagnostics.length) msg += `The mod could not read ${n.diagnostics.length} things from the game (${n.diagnostics.slice(0, 4).map(d => d.call).join(", ")}).`;
@@ -1746,10 +1791,11 @@ view.addEventListener("pointerdown", ev => {
   if (ev.button !== 0 || !vb) return;
   ev.preventDefault();   // no text selection or native image drag while panning
   const hit = ev.target.closest && ev.target.closest("[data-line]");
-  const sid = lay && !lay.geo && ev.shiftKey && ev.target.dataset ? ev.target.dataset.station : null;
+  const pickId = picking && ev.target.dataset && ev.target.dataset.station != null ? +ev.target.dataset.station : null;
+  const sid = !picking && lay && !lay.geo && ev.shiftKey && ev.target.dataset ? ev.target.dataset.station : null;
   const r = view.getBoundingClientRect();
   drag = { x: ev.clientX, y: ev.clientY, vb0: vb.slice(), sx: vb[2] / r.width, sy: vb[3] / r.height, moved: false,
-    line: hit ? hit.getAttribute("data-line") : null, station: sid != null ? +sid : null, el: ev.target, id: ev.pointerId };
+    line: hit ? hit.getAttribute("data-line") : null, station: sid != null ? +sid : null, pick: pickId, el: ev.target, id: ev.pointerId };
   try { view.setPointerCapture(ev.pointerId); } catch (e) { /* window listeners below still follow the pointer */ }
 });
 function dragMove(ev) {
@@ -1767,6 +1813,7 @@ function dragEnd(ev) {
   view.classList.remove("panning");
   try { view.releasePointerCapture(d.id); } catch (e) { /* already released */ }
   if (!d.moved) {
+    if (picking) { if (d.pick != null && ev && ev.type === "pointerup") togglePick(d.pick); return; }
     if (d.line != null && ev && ev.type === "pointerup") { const l = net.lines.find(x => String(x.id) === d.line); if (l) openLine(l); }
     return;
   }
@@ -1780,6 +1827,75 @@ function dragEnd(ev) {
     redraw(false);
   }
 }
+/* merge stops mode */
+let picking = false;
+const picked = [];
+function markPicked() {
+  for (const el of view.querySelectorAll("[data-station]")) {
+    const on = picked.includes(+el.dataset.station);
+    if (on && !el.hasAttribute("data-was")) {
+      el.setAttribute("data-was", el.getAttribute("stroke")); el.setAttribute("data-wasw", el.getAttribute("stroke-width"));
+      el.setAttribute("stroke", "#e5a84b"); el.setAttribute("stroke-width", Math.max(5, 2.2 * (+el.getAttribute("stroke-width") || 2)));
+    } else if (!on && el.hasAttribute("data-was")) unmark(el);
+  }
+  const names = picked.map(id => net.stations.get(id)?.name).filter(Boolean);
+  $("mergeMsg").textContent = names.length === 0 ? "Click the stops you want to join."
+    : names.length === 1 ? names[0] + ", now click the stop to join it with."
+    : names.join(" + ");
+  $("mergeGo").disabled = picked.length < 2;
+  $("mergeGo").textContent = picked.length > 2 ? "Join " + picked.length : "Join";
+}
+function unmark(el) {
+  el.setAttribute("stroke", el.getAttribute("data-was")); el.setAttribute("stroke-width", el.getAttribute("data-wasw"));
+  el.removeAttribute("data-was"); el.removeAttribute("data-wasw");
+}
+function togglePick(id) {
+  const i = picked.indexOf(id);
+  if (i >= 0) picked.splice(i, 1); else picked.push(id);
+  markPicked();
+}
+function setPicking(on) {
+  picking = on; picked.length = 0;
+  $("mergeBar").hidden = !on; $("mergeBtn").classList.toggle("on", on); view.classList.toggle("picking", on);
+  if (on) markPicked(); else for (const el of view.querySelectorAll("[data-was]")) unmark(el);
+}
+// rebuild the network from the export so joins can be added and taken away again
+function rebuildNet() {
+  const on = new Map(net.lines.map(l => [String(l.id), l.on]));
+  net = prepare(toNetwork(net.raw));
+  for (const l of net.lines) if (on.has(String(l.id))) l.on = on.get(String(l.id));
+  buildFilters(); renderJoined(); redraw(false);
+}
+function renderJoined() {
+  const groups = net ? joinsFor(net) : [];
+  $("joinedBox").hidden = !groups.length;
+  $("joinedList").innerHTML = groups.map((g, i) => {
+    const names = g.map(id => (net.stations.get(+id) || {}).name || ("Stop " + id));
+    return `<div><span title="${esc(names.join(" + "))}">${esc(names.join(" + "))}</span><button type="button" class="mini" data-unjoin="${i}">Undo</button></div>`;
+  }).join("");
+}
+$("mergeBtn").addEventListener("click", () => setPicking(!picking));
+$("mergeCancel").addEventListener("click", () => setPicking(false));
+$("mergeGo").addEventListener("click", () => {
+  if (picked.length < 2) return;
+  // a stop that is already in a group pulls the new ones into that group
+  const groups = joinsFor(net).map(g => g.map(String));
+  const ids = picked.map(String);
+  const hit = groups.filter(g => g.some(id => ids.includes(id)));
+  const mergedGroup = [...new Set([...hit.flat(), ...ids])];
+  setJoins(net, [...groups.filter(g => !hit.includes(g)), mergedGroup]);
+  setPicking(false);
+  rebuildNet();
+  say("Joined " + mergedGroup.length + " stops");
+});
+$("joinedList").addEventListener("click", ev => {
+  const b = ev.target.closest("[data-unjoin]"); if (!b) return;
+  const groups = joinsFor(net).slice(); groups.splice(+b.dataset.unjoin, 1);
+  setJoins(net, groups); rebuildNet();
+});
+$("unjoinAll").addEventListener("click", () => { setJoins(net, []); rebuildNet(); });
+document.addEventListener("keydown", ev => { if (ev.key === "Escape" && picking) setPicking(false); });
+
 window.addEventListener("pointermove", dragMove);
 window.addEventListener("pointerup", dragEnd);
 window.addEventListener("pointercancel", dragEnd);
@@ -1827,7 +1943,7 @@ async function squeeze(text, mode) {
 async function shareLink() {
   if (!net) return;
   const o = {}; for (const id of KEEP) { const el = $(id); o[id] = el.type === "checkbox" ? el.checked : el.value; }
-  const pack = { v: 1, raw: net.raw, o, b: badgesFor(net), d: openedFor(net) };
+  const pack = { v: 1, raw: net.raw, o, b: badgesFor(net), d: openedFor(net), j: joinsFor(net) };
   try {
     const bytes = await squeeze(JSON.stringify(pack), "in");
     const url = location.origin + location.pathname + "#s=" + b64u.enc(bytes), kb = Math.round(url.length / 1024);
@@ -1846,6 +1962,7 @@ async function openShared() {
     const n = toNetwork(pack.raw), k = saveId(n);
     if (pack.b) { const all = badgesAll(); all[k] = Object.assign(all[k] || {}, pack.b); badgeMem = all; }
     if (pack.d) { const all = openedAll(); all[k] = Object.assign(all[k] || {}, pack.d); openedMem = all; }
+    if (Array.isArray(pack.j)) { const all = joinsAll(); all[k] = pack.j; joinMem = all; }
     load(JSON.stringify(pack.raw), "shared link");
     return true;
   } catch (e) { setStatus("That link does not hold a map, or it was cut off.", true); return false; }
@@ -1872,6 +1989,19 @@ for (const id of KEEP) { $(id).addEventListener("change", remember); $(id).addEv
 let timeline = null, fullDl = null, tmT = null, tmPlaying = false, tmShownSig = "", tmCapTimer = null;
 /* opening dates set by hand on a line page, kept per save in this browser */
 const OPENED_KEY = "tf3-route-map-opened";
+/* stops joined by hand, kept per save in this browser */
+const JOIN_KEY = "tf3-route-map-joins";
+let joinMem = null;
+function joinsAll() {
+  if (joinMem) return joinMem;
+  try { joinMem = JSON.parse(localStorage.getItem(JOIN_KEY) || "{}") || {}; } catch (e) { joinMem = {}; }
+  return joinMem;
+}
+function joinsFor(n) { const all = joinsAll(); return all[saveId(n)] || []; }
+function setJoins(n, groups) {
+  const all = joinsAll(); all[saveId(n)] = groups; joinMem = all;
+  try { localStorage.setItem(JOIN_KEY, JSON.stringify(all)); } catch (e) { /* kept for this visit only */ }
+}
 /* route IDs typed on a line page (B1 becomes 12, say), kept per save in this browser */
 const BADGE_KEY = "tf3-route-map-badges";
 let badgeMem = null;
